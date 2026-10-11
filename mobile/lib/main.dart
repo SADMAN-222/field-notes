@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/config/injection.dart' as di;
+import 'core/theme/app_theme.dart';
 import 'app/router.dart';
 import 'features/authentication/auth_cubit.dart';
 
@@ -25,10 +26,7 @@ class FieldNotesApp extends StatelessWidget {
           
           return MaterialApp.router(
             title: 'Field Notes',
-            theme: ThemeData(
-              colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-              useMaterial3: true,
-            ),
+            theme: AppTheme.lightTheme,
             routerConfig: router,
           );
         },

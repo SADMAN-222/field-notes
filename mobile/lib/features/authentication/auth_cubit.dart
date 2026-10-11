@@ -9,12 +9,26 @@ class AuthCubit extends Cubit<AuthState> {
 
   AuthCubit({required this.authRepository}) : super(AuthInitial());
 
+  String? get currentUserId {
+    final s = state;
+    if (s is AuthAuthenticated) return s.userId;
+    return null;
+  }
+
+  String? get currentEmail {
+    final s = state;
+    if (s is AuthAuthenticated) return s.email;
+    return null;
+  }
+
   Future<void> checkAuth() async {
     emit(AuthLoading());
     try {
       final isLoggedIn = await authRepository.isLoggedIn();
       if (isLoggedIn) {
-        emit(AuthAuthenticated());
+        final userId = await authRepository.getUserId() ?? '';
+        final email = await authRepository.getUserEmail() ?? '';
+        emit(AuthAuthenticated(userId: userId, email: email));
       } else {
         emit(AuthUnauthenticated());
       }
@@ -26,8 +40,11 @@ class AuthCubit extends Cubit<AuthState> {
   Future<void> login(String email, String password) async {
     emit(AuthLoading());
     try {
-      await authRepository.login(email, password);
-      emit(AuthAuthenticated());
+      final user = await authRepository.login(email, password);
+      emit(AuthAuthenticated(
+        userId: user['userId'] ?? '',
+        email: user['email'] ?? email,
+      ));
     } catch (e) {
       emit(AuthError(e.toString()));
       emit(AuthUnauthenticated());
@@ -38,8 +55,11 @@ class AuthCubit extends Cubit<AuthState> {
     emit(AuthLoading());
     try {
       await authRepository.register(email, password);
-      await authRepository.login(email, password);
-      emit(AuthAuthenticated());
+      final user = await authRepository.login(email, password);
+      emit(AuthAuthenticated(
+        userId: user['userId'] ?? '',
+        email: user['email'] ?? email,
+      ));
     } catch (e) {
       emit(AuthError(e.toString()));
       emit(AuthUnauthenticated());
@@ -52,4 +72,3 @@ class AuthCubit extends Cubit<AuthState> {
     emit(AuthUnauthenticated());
   }
 }
-
