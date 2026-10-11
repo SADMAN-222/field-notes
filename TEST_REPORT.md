@@ -131,3 +131,4 @@ All 20 required functional screens and operational workflows are fully built and
 ## 6. Known Environmental Limitations
 
 - **Headless CLI Execution**: Flutter UI rendering was verified through Flutter widget tests (`testWidgets`), static analysis (`flutter analyze`), and unit tests. Physical device/emulator GPU display verification cannot be executed in this headless CI/sandbox terminal environment without an attached Android device or running emulator daemon.
+

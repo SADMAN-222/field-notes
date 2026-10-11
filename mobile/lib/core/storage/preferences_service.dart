@@ -14,9 +14,9 @@ class PreferencesService {
   static const _keyUserEmail = 'pref_user_email';
 
   static String get defaultBaseUrl {
-    if (kIsWeb) return 'http://localhost:8080';
-    if (Platform.isAndroid) return 'http://10.0.2.2:8080';
-    return 'http://localhost:8080';
+    if (kIsWeb) return 'http://localhost:8081';
+    if (Platform.isAndroid) return 'http://10.0.2.2:8081';
+    return 'http://localhost:8081';
   }
 
   String get baseUrl => _prefs.getString(_keyBaseUrl) ?? defaultBaseUrl;

@@ -1,0 +1,19 @@
+# IDEs and Editors
+.idea/
+.vscode/
+
+# Build and temporary files
+output.txt
+emulator_screen.png
+*.log
+
+# Backend data and local artifacts
+backend/data/
+backend/uploads/
+
+# Mobile build artifacts
+mobile/build/
+mobile/android/build/
+mobile/android/.gradle/
+mobile/android/app/build/
+.dart_tool/
