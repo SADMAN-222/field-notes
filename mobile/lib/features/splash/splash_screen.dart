@@ -31,9 +31,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   }
 
   Future<void> _initializeApp() async {
-    // Start background sync listener
+    // Start background sync listener (non-blocking)
     sl<SyncEngine>().initialize();
 
+    // Allow smooth splash animation and auth check to complete
     await Future.delayed(const Duration(milliseconds: 1200));
     if (!mounted) return;
 
