@@ -1,14 +1,12 @@
 package com.fieldnotes.backend.controller;
 
-import com.fieldnotes.backend.dto.SignupRequest;
-import com.fieldnotes.backend.repository.UserRepository;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -19,23 +17,18 @@ public class AuthControllerTest {
     @Autowired
     private AuthController authController;
 
-    @Autowired
-    private UserRepository userRepository;
-
-    @BeforeEach
-    public void setup() {
-        userRepository.deleteAll();
+    @Test
+    public void testHealthEndpoint() {
+        ResponseEntity<Map<String, String>> response = authController.health();
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertNotNull(response.getBody());
+        assertEquals("UP", response.getBody().get("status"));
+        assertEquals("Supabase", response.getBody().get("authProvider"));
     }
 
     @Test
-    @Transactional
-    public void testRegisterUser() {
-        SignupRequest request = new SignupRequest();
-        request.setEmail("test@test.com");
-        request.setPassword("password");
-
-        ResponseEntity<?> response = authController.registerUser(request);
+    public void testLogoutEndpoint() {
+        var response = authController.logout();
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(userRepository.findByEmail("test@test.com").orElse(null));
     }
 }

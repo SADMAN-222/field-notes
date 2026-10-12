@@ -52,6 +52,7 @@ dependencies:
   sqlite3: 2.6.0
   drift: 2.31.0
   sqlite3_flutter_libs: ^0.6.0+eol
+  supabase_flutter: ^2.18.3
 
 dev_dependencies:
   flutter_test:

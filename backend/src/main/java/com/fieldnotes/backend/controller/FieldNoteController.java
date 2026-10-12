@@ -4,16 +4,13 @@ import com.fieldnotes.backend.entity.FieldNote;
 import com.fieldnotes.backend.entity.User;
 import com.fieldnotes.backend.repository.FieldNoteRepository;
 import com.fieldnotes.backend.repository.SiteRepository;
-import com.fieldnotes.backend.repository.UserRepository;
-import com.fieldnotes.backend.security.UserDetailsImpl;
+import com.fieldnotes.backend.service.AuthenticatedUserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -30,29 +27,35 @@ import java.util.UUID;
 @RestController
 @RequestMapping("/api/v1/notes")
 public class FieldNoteController {
-    @Autowired private FieldNoteRepository fieldNoteRepository;
-    @Autowired private SiteRepository siteRepository;
-    @Autowired private UserRepository userRepository;
 
-    @Value("${upload.dir}")
+    @Autowired
+    private FieldNoteRepository fieldNoteRepository;
+
+    @Autowired
+    private SiteRepository siteRepository;
+
+    @Autowired
+    private AuthenticatedUserService authenticatedUserService;
+
+    @Value("${upload.dir:uploads}")
     private String uploadDir;
-
-    private User getCurrentUser() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        return userRepository.findById(userDetails.getId()).orElseThrow();
-    }
 
     @GetMapping
     public List<FieldNote> getAll() {
-        return fieldNoteRepository.findByUserId(getCurrentUser().getId());
+        return fieldNoteRepository.findByUserId(authenticatedUserService.getCurrentUserId());
     }
 
     @PostMapping
     public ResponseEntity<FieldNote> create(@RequestBody FieldNote note) {
-        User user = getCurrentUser();
+        User user = authenticatedUserService.getCurrentUser();
+        if (note.getSite() == null || note.getSite().getId() == null) {
+            return ResponseEntity.badRequest().build();
+        }
         return siteRepository.findByIdAndUserId(note.getSite().getId(), user.getId()).map(site -> {
             note.setUser(user);
-            note.setId(UUID.randomUUID());
+            if (note.getId() == null) {
+                note.setId(UUID.randomUUID());
+            }
             note.setSite(site);
             return ResponseEntity.ok(fieldNoteRepository.save(note));
         }).orElse(ResponseEntity.badRequest().build());
@@ -60,13 +63,14 @@ public class FieldNoteController {
 
     @GetMapping("/{id}")
     public ResponseEntity<FieldNote> getById(@PathVariable UUID id) {
-        return fieldNoteRepository.findByIdAndUserId(id, getCurrentUser().getId())
-                .map(ResponseEntity::ok).orElse(ResponseEntity.notFound().build());
+        return fieldNoteRepository.findByIdAndUserId(id, authenticatedUserService.getCurrentUserId())
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<FieldNote> update(@PathVariable UUID id, @RequestBody FieldNote noteDetails) {
-        return fieldNoteRepository.findByIdAndUserId(id, getCurrentUser().getId()).map(note -> {
+        return fieldNoteRepository.findByIdAndUserId(id, authenticatedUserService.getCurrentUserId()).map(note -> {
             note.setTitle(noteDetails.getTitle());
             note.setDescription(noteDetails.getDescription());
             note.setStatus(noteDetails.getStatus());
@@ -79,7 +83,7 @@ public class FieldNoteController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
-        return fieldNoteRepository.findByIdAndUserId(id, getCurrentUser().getId()).map(note -> {
+        return fieldNoteRepository.findByIdAndUserId(id, authenticatedUserService.getCurrentUserId()).map(note -> {
             note.setDeletedAt(OffsetDateTime.now());
             fieldNoteRepository.save(note);
             return ResponseEntity.ok().<Void>build();
@@ -88,7 +92,7 @@ public class FieldNoteController {
 
     @PostMapping("/{id}/photo")
     public ResponseEntity<String> uploadPhoto(@PathVariable UUID id, @RequestParam("file") MultipartFile file) {
-        return fieldNoteRepository.findByIdAndUserId(id, getCurrentUser().getId()).map(note -> {
+        return fieldNoteRepository.findByIdAndUserId(id, authenticatedUserService.getCurrentUserId()).map(note -> {
             try {
                 Path uploadPath = Paths.get(uploadDir);
                 if (!Files.exists(uploadPath)) {
@@ -109,7 +113,7 @@ public class FieldNoteController {
 
     @GetMapping("/{id}/photo")
     public ResponseEntity<Resource> getPhoto(@PathVariable UUID id) {
-        return fieldNoteRepository.findByIdAndUserId(id, getCurrentUser().getId()).<ResponseEntity<Resource>>map(note -> {
+        return fieldNoteRepository.findByIdAndUserId(id, authenticatedUserService.getCurrentUserId()).<ResponseEntity<Resource>>map(note -> {
             try {
                 if (note.getPhotoPath() == null) return ResponseEntity.notFound().build();
                 Path filePath = Paths.get(uploadDir).resolve(note.getPhotoPath()).normalize();

@@ -4,17 +4,16 @@ import com.fieldnotes.backend.dto.SyncPullResponse;
 import com.fieldnotes.backend.dto.SyncPushRequest;
 import com.fieldnotes.backend.entity.*;
 import com.fieldnotes.backend.repository.*;
-import com.fieldnotes.backend.security.UserDetailsImpl;
+import com.fieldnotes.backend.service.AuthenticatedUserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/sync")
@@ -24,17 +23,12 @@ public class SyncController {
     @Autowired private CustomerRepository customerRepository;
     @Autowired private SiteRepository siteRepository;
     @Autowired private FieldNoteRepository fieldNoteRepository;
-    @Autowired private UserRepository userRepository;
-
-    private User getCurrentUser() {
-        UserDetailsImpl userDetails = (UserDetailsImpl) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        return userRepository.findById(userDetails.getId()).orElseThrow();
-    }
+    @Autowired private AuthenticatedUserService authenticatedUserService;
 
     @PostMapping("/push")
     @Transactional
     public ResponseEntity<Void> push(@RequestBody SyncPushRequest request) {
-        User user = getCurrentUser();
+        User user = authenticatedUserService.getCurrentUser();
         OffsetDateTime now = OffsetDateTime.now();
 
         if (request.getCustomers() != null) {
@@ -80,7 +74,7 @@ public class SyncController {
 
     @GetMapping("/pull")
     public ResponseEntity<SyncPullResponse> pull(@RequestParam(required = false) OffsetDateTime cursor) {
-        User user = getCurrentUser();
+        User user = authenticatedUserService.getCurrentUser();
         if (cursor == null) {
             cursor = OffsetDateTime.parse("1970-01-01T00:00:00Z");
         }

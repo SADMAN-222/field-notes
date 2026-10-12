@@ -1,3 +1,4 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/security/secure_storage.dart';
 import '../../core/network/api_client.dart';
 import '../../core/database/database.dart';
@@ -16,38 +17,47 @@ class AuthRepository {
     required this.db,
   });
 
+  SupabaseClient get _supabase => Supabase.instance.client;
+
   Future<void> register(String email, String password) async {
-    await apiClient.dio.post('/api/v1/auth/register', data: {
-      'email': email.trim(),
-      'password': password,
-    });
+    final response = await _supabase.auth.signUp(
+      email: email.trim(),
+      password: password,
+    );
+    if (response.session != null) {
+      final session = response.session!;
+      await _persistSession(session, response.user?.email ?? email.trim());
+    }
   }
 
   Future<Map<String, String>> login(String email, String password) async {
-    final response = await apiClient.dio.post('/api/v1/auth/login', data: {
-      'email': email.trim(),
-      'password': password,
-    });
-    final data = response.data as Map<String, dynamic>;
-    final accessToken = (data['token'] ?? data['accessToken'] ?? '').toString();
-    final refreshToken = (data['refreshToken'] ?? '').toString();
-    final userId = (data['id'] ?? data['userId'] ?? '').toString();
-    final userEmail = (data['email'] ?? email).toString();
-
-    await secureStorage.saveTokens(
-      accessToken: accessToken,
-      refreshToken: refreshToken,
-      userId: userId,
-      email: userEmail,
+    final response = await _supabase.auth.signInWithPassword(
+      email: email.trim(),
+      password: password,
     );
-    await preferencesService.setUserEmail(userEmail);
+    final session = response.session ?? _supabase.auth.currentSession;
+    final user = response.user ?? _supabase.auth.currentUser;
+    if (session == null || user == null) {
+      throw Exception('Supabase login did not return a valid session.');
+    }
 
-    return {'userId': userId, 'email': userEmail};
+    await _persistSession(session, user.email ?? email.trim());
+    return {'userId': user.id, 'email': user.email ?? email.trim()};
+  }
+
+  Future<void> _persistSession(Session session, String email) async {
+    await secureStorage.saveTokens(
+      accessToken: session.accessToken,
+      refreshToken: session.refreshToken ?? '',
+      userId: session.user.id,
+      email: email,
+    );
+    await preferencesService.setUserEmail(email);
   }
 
   Future<void> logout() async {
     try {
-      await apiClient.dio.post('/api/v1/auth/logout');
+      await _supabase.auth.signOut();
     } catch (_) {}
     await secureStorage.clearAll();
     await preferencesService.clearUserPreferences();
@@ -63,15 +73,18 @@ class AuthRepository {
   }
 
   Future<bool> isLoggedIn() async {
+    if (_supabase.auth.currentSession != null) {
+      return true;
+    }
     final token = await secureStorage.getAccessToken();
     return token != null && token.isNotEmpty;
   }
 
   Future<String?> getUserId() async {
-    return await secureStorage.getUserId();
+    return _supabase.auth.currentUser?.id ?? await secureStorage.getUserId();
   }
 
   Future<String?> getUserEmail() async {
-    return await secureStorage.getUserEmail() ?? preferencesService.userEmail;
+    return _supabase.auth.currentUser?.email ?? await secureStorage.getUserEmail() ?? preferencesService.userEmail;
   }
 }

@@ -9,7 +9,6 @@ import java.util.UUID;
 public class SyncChange {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -33,6 +32,9 @@ public class SyncChange {
 
     @PrePersist
     protected void onCreate() {
+        if (id == null) {
+            id = UUID.randomUUID();
+        }
         if (timestamp == null) {
             timestamp = OffsetDateTime.now();
         }
