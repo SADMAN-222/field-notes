@@ -6,7 +6,8 @@ import '../tables.dart';
 part 'field_notes_dao.g.dart';
 
 @DriftAccessor(tables: [FieldNotes, SyncOutbox])
-class FieldNotesDao extends DatabaseAccessor<AppDatabase> with _$FieldNotesDaoMixin {
+class FieldNotesDao extends DatabaseAccessor<AppDatabase>
+    with _$FieldNotesDaoMixin {
   FieldNotesDao(super.db);
 
   Stream<List<FieldNote>> watchNotesBySite(String siteId) {
@@ -33,7 +34,8 @@ class FieldNotesDao extends DatabaseAccessor<AppDatabase> with _$FieldNotesDaoMi
             }
             if (query != null && query.trim().isNotEmpty) {
               final lowerQuery = '%${query.toLowerCase()}%';
-              expr = expr &
+              expr =
+                  expr &
                   (tbl.title.lower().like(lowerQuery) |
                       tbl.description.lower().like(lowerQuery));
             }
@@ -52,11 +54,15 @@ class FieldNotesDao extends DatabaseAccessor<AppDatabase> with _$FieldNotesDaoMi
   }
 
   Future<FieldNote?> getNoteById(String id) {
-    return (select(fieldNotes)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+    return (select(
+      fieldNotes,
+    )..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
   }
 
   Stream<FieldNote?> watchNoteById(String id) {
-    return (select(fieldNotes)..where((tbl) => tbl.id.equals(id))).watchSingleOrNull();
+    return (select(
+      fieldNotes,
+    )..where((tbl) => tbl.id.equals(id))).watchSingleOrNull();
   }
 
   Future<int> getNotesCount(String userId, {String? status}) async {
@@ -68,6 +74,17 @@ class FieldNotesDao extends DatabaseAccessor<AppDatabase> with _$FieldNotesDaoMi
     }
     query.addColumns([countExp]);
     return await query.map((row) => row.read(countExp)).getSingle() ?? 0;
+  }
+
+  Stream<int> watchNotesCount(String userId, {String? status}) {
+    final countExp = fieldNotes.id.count();
+    final query = selectOnly(fieldNotes)
+      ..where(fieldNotes.userId.equals(userId) & fieldNotes.deletedAt.isNull());
+    if (status != null && status.isNotEmpty && status != 'ALL') {
+      query.where(fieldNotes.status.equals(status));
+    }
+    query.addColumns([countExp]);
+    return query.map((row) => row.read(countExp) ?? 0).watchSingle();
   }
 
   Future<void> createNote(FieldNote note) {
@@ -90,14 +107,17 @@ class FieldNotesDao extends DatabaseAccessor<AppDatabase> with _$FieldNotesDaoMi
         'version': note.version,
       });
 
-      await into(syncOutbox).insert(SyncOutboxCompanion.insert(
-        entityType: 'note',
-        entityId: note.id,
-        operation: 'CREATE',
-        payload: Value(payload),
-        expectedVersion: Value(0),
-        createdAt: DateTime.now(),
-      ));
+      await into(syncOutbox).insert(
+        SyncOutboxCompanion.insert(
+          entityType: 'note',
+          entityId: note.id,
+          operation: 'CREATE',
+          payload: Value(payload),
+          expectedVersion: Value(0),
+          createdAt: DateTime.now(),
+        ),
+      );
+      await _enqueuePhotoUpload(note);
     });
   }
 
@@ -121,14 +141,17 @@ class FieldNotesDao extends DatabaseAccessor<AppDatabase> with _$FieldNotesDaoMi
         'version': note.version,
       });
 
-      await into(syncOutbox).insert(SyncOutboxCompanion.insert(
-        entityType: 'note',
-        entityId: note.id,
-        operation: 'UPDATE',
-        payload: Value(payload),
-        expectedVersion: Value(note.version),
-        createdAt: DateTime.now(),
-      ));
+      await into(syncOutbox).insert(
+        SyncOutboxCompanion.insert(
+          entityType: 'note',
+          entityId: note.id,
+          operation: 'UPDATE',
+          payload: Value(payload),
+          expectedVersion: Value(note.version),
+          createdAt: DateTime.now(),
+        ),
+      );
+      await _enqueuePhotoUpload(note);
     });
   }
 
@@ -154,14 +177,16 @@ class FieldNotesDao extends DatabaseAccessor<AppDatabase> with _$FieldNotesDaoMi
         'version': note.version,
       });
 
-      await into(syncOutbox).insert(SyncOutboxCompanion.insert(
-        entityType: 'note',
-        entityId: note.id,
-        operation: 'DELETE',
-        payload: Value(payload),
-        expectedVersion: Value(note.version),
-        createdAt: DateTime.now(),
-      ));
+      await into(syncOutbox).insert(
+        SyncOutboxCompanion.insert(
+          entityType: 'note',
+          entityId: note.id,
+          operation: 'DELETE',
+          payload: Value(payload),
+          expectedVersion: Value(note.version),
+          createdAt: DateTime.now(),
+        ),
+      );
     });
   }
 
@@ -170,7 +195,29 @@ class FieldNotesDao extends DatabaseAccessor<AppDatabase> with _$FieldNotesDaoMi
   }
 
   Future<void> deleteFromServer(String noteId) async {
-    await (update(fieldNotes)..where((t) => t.id.equals(noteId)))
-        .write(FieldNotesCompanion(deletedAt: Value(DateTime.now())));
+    await (update(fieldNotes)..where((t) => t.id.equals(noteId))).write(
+      FieldNotesCompanion(deletedAt: Value(DateTime.now())),
+    );
+  }
+
+  Future<void> _enqueuePhotoUpload(FieldNote note) async {
+    final photoPath = note.photoPath;
+    if (photoPath == null || photoPath.isEmpty) return;
+
+    await into(syncOutbox).insert(
+      SyncOutboxCompanion.insert(
+        entityType: 'photo',
+        entityId: note.id,
+        operation: 'UPLOAD',
+        payload: Value(
+          jsonEncode({
+            'userId': note.userId,
+            'noteId': note.id,
+            'photoPath': photoPath,
+          }),
+        ),
+        createdAt: DateTime.now(),
+      ),
+    );
   }
 }

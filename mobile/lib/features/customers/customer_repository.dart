@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../../core/database/database.dart';
 import '../../core/database/daos/customer_dao.dart';
 
@@ -24,8 +25,10 @@ class CustomerRepository {
   Future<int> getCustomerCount(String userId) =>
       customerDao.getCustomerCount(userId);
 
-  Future<void> addCustomer(Customer customer) =>
-      customerDao.createCustomer(customer);
+  Future<void> addCustomer(Customer customer) {
+    debugPrint('CustomerRepository.addCustomer: ${customer.userId}, ID: ${customer.id}');
+    return customerDao.createCustomer(customer);
+  }
 
   Future<void> updateCustomer(Customer customer) =>
       customerDao.updateCustomer(customer);

@@ -57,12 +57,19 @@ class _SitesScreenState extends State<SitesScreen> {
           // Search box
           Container(
             color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 10.0,
+            ),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Search sites by name or address...',
-                prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.textMuted),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 20,
+                  color: AppColors.textMuted,
+                ),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear, size: 18),
@@ -72,7 +79,10 @@ class _SitesScreenState extends State<SitesScreen> {
                         },
                       )
                     : null,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
               ),
               onChanged: (val) {
                 setState(() => _searchQuery = val.trim());
@@ -88,12 +98,21 @@ class _SitesScreenState extends State<SitesScreen> {
               child: StreamBuilder<List<Site>>(
                 stream: _searchQuery.isEmpty
                     ? (widget.customerId != null
-                        ? siteRepo.watchSites(widget.customerId!)
-                        : siteRepo.watchAllSites(userId))
-                    : siteRepo.searchSites(userId, _searchQuery, customerId: widget.customerId),
+                          ? siteRepo.watchSites(widget.customerId!)
+                          : siteRepo.watchAllSites(userId))
+                    : siteRepo.searchSites(
+                        userId,
+                        _searchQuery,
+                        customerId: widget.customerId,
+                      ),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text('Could not load sites: ${snapshot.error}'),
+                    );
                   }
 
                   final sites = snapshot.data ?? [];
@@ -101,15 +120,19 @@ class _SitesScreenState extends State<SitesScreen> {
                   if (sites.isEmpty) {
                     return EmptyStateView(
                       icon: Icons.location_city_outlined,
-                      title: _searchQuery.isEmpty ? 'No Sites Found' : 'No Results Found',
+                      title: _searchQuery.isEmpty
+                          ? 'No Sites Found'
+                          : 'No Results Found',
                       subtitle: _searchQuery.isEmpty
                           ? 'Register sites to associate field notes and inspections.'
                           : 'Try adjusting your search terms.',
                       actionLabel: _searchQuery.isEmpty ? 'Add Site' : null,
                       onAction: _searchQuery.isEmpty
-                          ? () => context.push(widget.customerId != null
-                              ? '/sites/new?customerId=${widget.customerId}'
-                              : '/sites/new')
+                          ? () => context.push(
+                              widget.customerId != null
+                                  ? '/sites/new?customerId=${widget.customerId}'
+                                  : '/sites/new',
+                            )
                           : null,
                     );
                   }
@@ -129,7 +152,9 @@ class _SitesScreenState extends State<SitesScreen> {
                               width: 44,
                               height: 44,
                               decoration: BoxDecoration(
-                                color: AppColors.secondary.withValues(alpha: 0.12),
+                                color: AppColors.secondary.withValues(
+                                  alpha: 0.12,
+                                ),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: const Icon(
@@ -154,7 +179,8 @@ class _SitesScreenState extends State<SitesScreen> {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                   const SizedBox(height: 3),
-                                  if (site.address != null && site.address!.trim().isNotEmpty) ...[
+                                  if (site.address != null &&
+                                      site.address!.trim().isNotEmpty) ...[
                                     Text(
                                       site.address!,
                                       style: const TextStyle(
@@ -170,15 +196,24 @@ class _SitesScreenState extends State<SitesScreen> {
                                     children: [
                                       // Customer name badge
                                       FutureBuilder<Customer?>(
-                                        future: customerDao.getCustomerById(site.customerId),
+                                        future: customerDao.getCustomerById(
+                                          site.customerId,
+                                        ),
                                         builder: (context, custSnap) {
-                                          final custName = custSnap.data?.name ?? 'Customer';
+                                          final custName =
+                                              custSnap.data?.name ?? 'Customer';
                                           return Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
                                             decoration: BoxDecoration(
                                               color: AppColors.surfaceSubtle,
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: Border.all(color: AppColors.border),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                color: AppColors.border,
+                                              ),
                                             ),
                                             child: Text(
                                               custName,
@@ -196,13 +231,19 @@ class _SitesScreenState extends State<SitesScreen> {
                                       const SizedBox(width: 8),
                                       // Field Notes count
                                       StreamBuilder<List<FieldNote>>(
-                                        stream: fieldNotesDao.watchNotesBySite(site.id),
+                                        stream: fieldNotesDao.watchNotesBySite(
+                                          site.id,
+                                        ),
                                         builder: (context, noteSnap) {
-                                          final count = noteSnap.data?.length ?? 0;
+                                          final count =
+                                              noteSnap.data?.length ?? 0;
                                           return Row(
                                             children: [
-                                              const Icon(Icons.assignment_outlined,
-                                                  size: 13, color: AppColors.textMuted),
+                                              const Icon(
+                                                Icons.assignment_outlined,
+                                                size: 13,
+                                                color: AppColors.textMuted,
+                                              ),
                                               const SizedBox(width: 3),
                                               Text(
                                                 '$count notes',
@@ -238,9 +279,11 @@ class _SitesScreenState extends State<SitesScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push(widget.customerId != null
-            ? '/sites/new?customerId=${widget.customerId}'
-            : '/sites/new'),
+        onPressed: () => context.push(
+          widget.customerId != null
+              ? '/sites/new?customerId=${widget.customerId}'
+              : '/sites/new',
+        ),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         child: const Icon(Icons.add),

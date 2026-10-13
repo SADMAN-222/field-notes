@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../../core/database/database.dart';
 import '../../core/database/daos/sites_dao.dart';
 
@@ -27,8 +28,10 @@ class SiteRepository {
   Future<int> getSiteCount(String userId) =>
       sitesDao.getSiteCount(userId);
 
-  Future<void> addSite(Site site) =>
-      sitesDao.createSite(site);
+  Future<void> addSite(Site site) {
+    debugPrint('SiteRepository.addSite: ${site.userId}, ID: ${site.id}, Customer: ${site.customerId}');
+    return sitesDao.createSite(site);
+  }
 
   Future<void> updateSite(Site site) =>
       sitesDao.updateSite(site);

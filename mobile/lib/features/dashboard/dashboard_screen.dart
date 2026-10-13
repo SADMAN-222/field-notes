@@ -6,6 +6,7 @@ import '../../core/database/database.dart';
 import '../../core/database/daos/customer_dao.dart';
 import '../../core/database/daos/sites_dao.dart';
 import '../../core/database/daos/field_notes_dao.dart';
+import '../../core/database/daos/outbox_dao.dart';
 import '../../core/sync/sync_engine.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/common_widgets.dart';
@@ -24,6 +25,7 @@ class DashboardScreen extends StatelessWidget {
     final customerDao = sl<CustomerDao>();
     final sitesDao = sl<SitesDao>();
     final fieldNotesDao = sl<FieldNotesDao>();
+    final outboxDao = sl<OutboxDao>();
     final syncEngine = sl<SyncEngine>();
 
     return Scaffold(
@@ -38,7 +40,11 @@ class DashboardScreen extends StatelessWidget {
                 color: AppColors.primary,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.assignment_turned_in_outlined, color: Colors.white, size: 18),
+              child: const Icon(
+                Icons.assignment_turned_in_outlined,
+                color: Colors.white,
+                size: 18,
+              ),
             ),
             const SizedBox(width: 10),
             const Text('Field Notes'),
@@ -94,7 +100,10 @@ class DashboardScreen extends StatelessWidget {
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(12),
@@ -102,11 +111,19 @@ class DashboardScreen extends StatelessWidget {
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.wifi_tethering, color: Colors.white, size: 12),
+                              Icon(
+                                Icons.wifi_tethering,
+                                color: Colors.white,
+                                size: 12,
+                              ),
                               SizedBox(width: 4),
                               Text(
                                 'Offline-Ready',
-                                style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ],
                           ),
@@ -142,7 +159,7 @@ class DashboardScreen extends StatelessWidget {
                       label: 'Customers',
                       icon: Icons.people_outline,
                       color: AppColors.primary,
-                      futureCount: customerDao.getCustomerCount(userId),
+                      countStream: customerDao.watchCustomerCount(userId),
                       onTap: () => context.push('/customers'),
                     ),
                   ),
@@ -152,7 +169,7 @@ class DashboardScreen extends StatelessWidget {
                       label: 'Sites',
                       icon: Icons.location_city_outlined,
                       color: AppColors.secondary,
-                      futureCount: sitesDao.getSiteCount(userId),
+                      countStream: sitesDao.watchSiteCount(userId),
                       onTap: () => context.push('/sites'),
                     ),
                   ),
@@ -162,12 +179,15 @@ class DashboardScreen extends StatelessWidget {
                       label: 'Notes',
                       icon: Icons.assignment_outlined,
                       color: const Color(0xFF8B5CF6), // Purple
-                      futureCount: fieldNotesDao.getNotesCount(userId),
+                      countStream: fieldNotesDao.watchNotesCount(userId),
                       onTap: () => context.push('/notes'),
                     ),
                   ),
                 ],
               ),
+
+              const SizedBox(height: 10),
+              _buildSyncSummary(outboxDao),
 
               const SizedBox(height: 20),
 
@@ -250,16 +270,26 @@ class DashboardScreen extends StatelessWidget {
                       padding: const EdgeInsets.all(24),
                       child: Column(
                         children: [
-                          Icon(Icons.note_add_outlined, size: 36, color: AppColors.textMuted),
+                          Icon(
+                            Icons.note_add_outlined,
+                            size: 36,
+                            color: AppColors.textMuted,
+                          ),
                           const SizedBox(height: 10),
                           const Text(
                             'No Field Notes Yet',
-                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 15,
+                            ),
                           ),
                           const SizedBox(height: 4),
                           const Text(
                             'Capture inspections, photos, and GPS coords.',
-                            style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                            style: TextStyle(
+                              color: AppColors.textSecondary,
+                              fontSize: 13,
+                            ),
                           ),
                           const SizedBox(height: 14),
                           ElevatedButton(
@@ -289,7 +319,9 @@ class DashboardScreen extends StatelessWidget {
                                   border: Border.all(color: AppColors.border),
                                 ),
                                 child: Icon(
-                                  note.photoPath != null ? Icons.photo_outlined : Icons.description_outlined,
+                                  note.photoPath != null
+                                      ? Icons.photo_outlined
+                                      : Icons.description_outlined,
                                   color: AppColors.primary,
                                   size: 22,
                                 ),
@@ -319,12 +351,20 @@ class DashboardScreen extends StatelessWidget {
                                             color: AppColors.textSecondary,
                                           ),
                                         ),
-                                        if (note.lat != null && note.lng != null) ...[
+                                        if (note.lat != null &&
+                                            note.lng != null) ...[
                                           const SizedBox(width: 8),
-                                          const Icon(Icons.location_on_outlined, size: 12, color: AppColors.textMuted),
+                                          const Icon(
+                                            Icons.location_on_outlined,
+                                            size: 12,
+                                            color: AppColors.textMuted,
+                                          ),
                                           const Text(
                                             ' GPS',
-                                            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: AppColors.textMuted,
+                                            ),
                                           ),
                                         ],
                                       ],
@@ -373,11 +413,31 @@ class DashboardScreen extends StatelessWidget {
           }
         },
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard_outlined), activeIcon: Icon(Icons.dashboard), label: 'Dashboard'),
-          BottomNavigationBarItem(icon: Icon(Icons.people_outline), activeIcon: Icon(Icons.people), label: 'Customers'),
-          BottomNavigationBarItem(icon: Icon(Icons.location_city_outlined), activeIcon: Icon(Icons.location_city), label: 'Sites'),
-          BottomNavigationBarItem(icon: Icon(Icons.assignment_outlined), activeIcon: Icon(Icons.assignment), label: 'Notes'),
-          BottomNavigationBarItem(icon: Icon(Icons.sync), activeIcon: Icon(Icons.sync), label: 'Sync'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_outlined),
+            activeIcon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.people_outline),
+            activeIcon: Icon(Icons.people),
+            label: 'Customers',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.location_city_outlined),
+            activeIcon: Icon(Icons.location_city),
+            label: 'Sites',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.assignment_outlined),
+            activeIcon: Icon(Icons.assignment),
+            label: 'Notes',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.sync),
+            activeIcon: Icon(Icons.sync),
+            label: 'Sync',
+          ),
         ],
       ),
     );
@@ -387,14 +447,13 @@ class DashboardScreen extends StatelessWidget {
     required String label,
     required IconData icon,
     required Color color,
-    required Future<int> futureCount,
+    required Stream<int> countStream,
     required VoidCallback onTap,
   }) {
-    return FutureBuilder<int>(
-      future: futureCount,
-      initialData: 0,
+    return StreamBuilder<int>(
+      stream: countStream,
       builder: (context, snapshot) {
-        final count = snapshot.data ?? 0;
+        final count = snapshot.data;
         return AppCard(
           onTap: onTap,
           padding: const EdgeInsets.all(12),
@@ -411,11 +470,13 @@ class DashboardScreen extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                '$count',
-                style: const TextStyle(
+                snapshot.hasError ? '!' : count?.toString() ?? '—',
+                style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+                  color: snapshot.hasError
+                      ? AppColors.syncError
+                      : AppColors.textPrimary,
                 ),
               ),
               const SizedBox(height: 2),
@@ -429,6 +490,59 @@ class DashboardScreen extends StatelessWidget {
               ),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSyncSummary(OutboxDao outboxDao) {
+    return StreamBuilder<int>(
+      stream: outboxDao.watchPendingCount(),
+      builder: (context, pendingSnapshot) {
+        return StreamBuilder<int>(
+          stream: outboxDao.watchFailedCount(),
+          builder: (context, failedSnapshot) {
+            final hasError =
+                pendingSnapshot.hasError || failedSnapshot.hasError;
+            final pending = pendingSnapshot.data;
+            final failed = failedSnapshot.data;
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.sync_rounded,
+                    size: 16,
+                    color: AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Sync queue',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    hasError
+                        ? 'Unavailable'
+                        : 'Pending ${pending ?? '—'}  ·  Failed ${failed ?? '—'}',
+                    style: TextStyle(
+                      color: hasError
+                          ? AppColors.syncError
+                          : (failed ?? 0) > 0
+                          ? AppColors.syncError
+                          : AppColors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
       },
     );

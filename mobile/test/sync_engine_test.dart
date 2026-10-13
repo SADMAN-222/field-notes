@@ -12,6 +12,7 @@ import 'package:field_notes_test/core/sync/sync_engine.dart';
 import 'test_helper.dart';
 
 class MockDio extends Mock implements Dio {}
+
 class MockSecureStorage extends Mock implements SecureStorage {}
 
 void main() {
@@ -58,72 +59,97 @@ void main() {
   });
 
   group('SyncEngine', () {
-    test('sync skips gracefully when user has no access token', () async {
-      when(() => mockSecureStorage.getAccessToken()).thenAnswer((_) async => null);
+    test('sync reports an error when user has no access token', () async {
+      when(
+        () => mockSecureStorage.getAccessToken(),
+      ).thenAnswer((_) async => null);
 
       await syncEngine.sync();
 
       verifyNever(() => mockDio.post(any(), data: any(named: 'data')));
-      verifyNever(() => mockDio.get(any(), queryParameters: any(named: 'queryParameters')));
+      verifyNever(
+        () =>
+            mockDio.get(any(), queryParameters: any(named: 'queryParameters')),
+      );
       expect(syncEngine.isSyncing, isFalse);
+      expect(syncEngine.lastError, contains('No authenticated access token'));
     });
 
-    test('push gathers outbox entries, sends to /api/v1/sync/push, and cleans up outbox on 200', () async {
-      when(() => mockSecureStorage.getAccessToken()).thenAnswer((_) async => 'valid-jwt');
+    test(
+      'push gathers outbox entries, sends to /api/v1/sync/push, and cleans up outbox on 200',
+      () async {
+        when(
+          () => mockSecureStorage.getAccessToken(),
+        ).thenAnswer((_) async => 'valid-jwt');
+        when(
+          () => mockSecureStorage.getUserId(),
+        ).thenAnswer((_) async => 'user-123');
 
-      // Add a customer via DAO which writes to outbox
-      final now = DateTime.now();
-      await customerDao.createCustomer(Customer(
-        id: 'cust-sync-1',
-        userId: 'user-123',
-        name: 'Sync Test Customer',
-        contactInformation: 'test@sync.com',
-        createdAt: now,
-        updatedAt: now,
-        version: 0,
-      ));
+        // Add a customer via DAO which writes to outbox
+        final now = DateTime.now();
+        await customerDao.createCustomer(
+          Customer(
+            id: 'cust-sync-1',
+            userId: 'user-123',
+            name: 'Sync Test Customer',
+            contactInformation: 'test@sync.com',
+            createdAt: now,
+            updatedAt: now,
+            version: 0,
+          ),
+        );
 
-      final pendingBefore = await outboxDao.getPendingEntries();
-      expect(pendingBefore.length, equals(1));
+        final pendingBefore = await outboxDao.getPendingEntries();
+        expect(pendingBefore.length, equals(1));
 
-      // Mock Dio push response
-      when(() => mockDio.post(
-            '/api/v1/sync/push',
-            data: any(named: 'data'),
-          )).thenAnswer((_) async => Response(
+        // Mock Dio push response
+        when(
+          () => mockDio.post('/api/v1/sync/push', data: any(named: 'data')),
+        ).thenAnswer(
+          (_) async => Response(
             requestOptions: RequestOptions(path: '/api/v1/sync/push'),
             statusCode: 200,
             data: {'status': 'SUCCESS'},
-          ));
+          ),
+        );
 
-      await syncEngine.push();
+        await syncEngine.push();
 
-      // Pending outbox entries should have been safely deleted
-      final pendingAfter = await outboxDao.getPendingEntries();
-      expect(pendingAfter, isEmpty);
-    });
+        // Pending outbox entries should have been safely deleted
+        final pendingAfter = await outboxDao.getPendingEntries();
+        expect(pendingAfter, isEmpty);
+      },
+    );
 
     test('push marks entries as FAILED if server returns 500 error', () async {
-      when(() => mockSecureStorage.getAccessToken()).thenAnswer((_) async => 'valid-jwt');
+      when(
+        () => mockSecureStorage.getAccessToken(),
+      ).thenAnswer((_) async => 'valid-jwt');
+      when(
+        () => mockSecureStorage.getUserId(),
+      ).thenAnswer((_) async => 'user-123');
 
       final now = DateTime.now();
-      await customerDao.createCustomer(Customer(
-        id: 'cust-sync-err',
-        userId: 'user-123',
-        name: 'Failing Sync Customer',
-        contactInformation: 'err@sync.com',
-        createdAt: now,
-        updatedAt: now,
-        version: 0,
-      ));
+      await customerDao.createCustomer(
+        Customer(
+          id: 'cust-sync-err',
+          userId: 'user-123',
+          name: 'Failing Sync Customer',
+          contactInformation: 'err@sync.com',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+      );
 
-      when(() => mockDio.post(
-            '/api/v1/sync/push',
-            data: any(named: 'data'),
-          )).thenThrow(DioException(
-        requestOptions: RequestOptions(path: '/api/v1/sync/push'),
-        error: 'Connection refused',
-      ));
+      when(
+        () => mockDio.post('/api/v1/sync/push', data: any(named: 'data')),
+      ).thenThrow(
+        DioException(
+          requestOptions: RequestOptions(path: '/api/v1/sync/push'),
+          error: 'Connection refused',
+        ),
+      );
 
       try {
         await syncEngine.push();
@@ -136,57 +162,94 @@ void main() {
       expect(allOutbox.first.state, equals('FAILED'));
     });
 
-    test('pull fetches server items and writes to local SQLite database', () async {
-      when(() => mockSecureStorage.getAccessToken()).thenAnswer((_) async => 'valid-jwt');
-      when(() => mockSecureStorage.getUserId()).thenAnswer((_) async => 'user-123');
+    test("push does not send another user's outbox entries", () async {
+      when(
+        () => mockSecureStorage.getUserId(),
+      ).thenAnswer((_) async => 'user-456');
 
-      final serverCustomers = [
-        {
-          'id': 'remote-cust-1',
-          'name': 'Remote Customer Inc',
-          'contactInformation': 'remote@corp.com',
-          'createdAt': '2026-03-01T12:00:00Z',
-          'updatedAt': '2026-03-01T12:00:00Z',
-          'deletedAt': null,
-          'version': 1,
-        }
-      ];
+      final now = DateTime.now();
+      await customerDao.createCustomer(
+        Customer(
+          id: 'cust-other-user',
+          userId: 'user-123',
+          name: 'Other User Customer',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+      );
 
-      final serverSites = [
-        {
-          'id': 'remote-site-1',
-          'customerId': 'remote-cust-1',
-          'siteName': 'Remote Solar Park',
-          'address': 'Highway 101',
-          'createdAt': '2026-03-01T12:00:00Z',
-          'updatedAt': '2026-03-01T12:00:00Z',
-          'deletedAt': null,
-          'version': 1,
-        }
-      ];
+      await syncEngine.push();
 
-      final serverNotes = [
-        {
-          'id': 'remote-note-1',
-          'siteId': 'remote-site-1',
-          'title': 'Remote Inverter Check',
-          'description': 'Working normally',
-          'status': 'SYNCED',
-          'lat': 34.05,
-          'lng': -118.25,
-          'photoPath': null,
-          'recordedAt': '2026-03-01T12:00:00Z',
-          'createdAt': '2026-03-01T12:00:00Z',
-          'updatedAt': '2026-03-01T12:00:00Z',
-          'deletedAt': null,
-          'version': 1,
-        }
-      ];
+      verifyNever(() => mockDio.post(any(), data: any(named: 'data')));
+      final entries = await outboxDao.watchAllOutbox().first;
+      expect(entries.single.state, equals('FAILED'));
+      expect(
+        entries.single.lastError,
+        contains('does not match the authenticated user'),
+      );
+    });
 
-      when(() => mockDio.get(
+    test(
+      'pull fetches server items and writes to local SQLite database',
+      () async {
+        when(
+          () => mockSecureStorage.getAccessToken(),
+        ).thenAnswer((_) async => 'valid-jwt');
+        when(
+          () => mockSecureStorage.getUserId(),
+        ).thenAnswer((_) async => 'user-123');
+
+        final serverCustomers = [
+          {
+            'id': 'remote-cust-1',
+            'name': 'Remote Customer Inc',
+            'contactInformation': 'remote@corp.com',
+            'createdAt': '2026-03-01T12:00:00Z',
+            'updatedAt': '2026-03-01T12:00:00Z',
+            'deletedAt': null,
+            'version': 1,
+          },
+        ];
+
+        final serverSites = [
+          {
+            'id': 'remote-site-1',
+            'customerId': 'remote-cust-1',
+            'siteName': 'Remote Solar Park',
+            'address': 'Highway 101',
+            'createdAt': '2026-03-01T12:00:00Z',
+            'updatedAt': '2026-03-01T12:00:00Z',
+            'deletedAt': null,
+            'version': 1,
+          },
+        ];
+
+        final serverNotes = [
+          {
+            'id': 'remote-note-1',
+            'siteId': 'remote-site-1',
+            'title': 'Remote Inverter Check',
+            'description': 'Working normally',
+            'status': 'SYNCED',
+            'lat': 34.05,
+            'lng': -118.25,
+            'photoPath': null,
+            'recordedAt': '2026-03-01T12:00:00Z',
+            'createdAt': '2026-03-01T12:00:00Z',
+            'updatedAt': '2026-03-01T12:00:00Z',
+            'deletedAt': null,
+            'version': 1,
+          },
+        ];
+
+        when(
+          () => mockDio.get(
             '/api/v1/sync/pull',
             queryParameters: any(named: 'queryParameters'),
-          )).thenAnswer((_) async => Response(
+          ),
+        ).thenAnswer(
+          (_) async => Response(
             requestOptions: RequestOptions(path: '/api/v1/sync/pull'),
             statusCode: 200,
             data: {
@@ -195,22 +258,30 @@ void main() {
               'fieldNotes': serverNotes,
               'newCursor': '2026-03-01T12:00:00Z',
             },
-          ));
+          ),
+        );
 
-      await syncEngine.pull();
+        await syncEngine.pull();
 
-      // Verify records are inserted into SQLite
-      final pulledCustomer = await customerDao.getCustomerById('remote-cust-1');
-      expect(pulledCustomer, isNotNull);
-      expect(pulledCustomer!.name, equals('Remote Customer Inc'));
+        // Verify records are inserted into SQLite
+        final pulledCustomer = await customerDao.getCustomerById(
+          'remote-cust-1',
+        );
+        expect(pulledCustomer, isNotNull);
+        expect(pulledCustomer!.name, equals('Remote Customer Inc'));
 
-      final pulledSite = await (db.select(db.sites)..where((t) => t.id.equals('remote-site-1'))).getSingleOrNull();
-      expect(pulledSite, isNotNull);
-      expect(pulledSite!.siteName, equals('Remote Solar Park'));
+        final pulledSite = await (db.select(
+          db.sites,
+        )..where((t) => t.id.equals('remote-site-1'))).getSingleOrNull();
+        expect(pulledSite, isNotNull);
+        expect(pulledSite!.siteName, equals('Remote Solar Park'));
 
-      final pulledNote = await (db.select(db.fieldNotes)..where((t) => t.id.equals('remote-note-1'))).getSingleOrNull();
-      expect(pulledNote, isNotNull);
-      expect(pulledNote!.title, equals('Remote Inverter Check'));
-    });
+        final pulledNote = await (db.select(
+          db.fieldNotes,
+        )..where((t) => t.id.equals('remote-note-1'))).getSingleOrNull();
+        expect(pulledNote, isNotNull);
+        expect(pulledNote!.title, equals('Remote Inverter Check'));
+      },
+    );
   });
 }

@@ -24,6 +24,14 @@ class NoteDetailsScreen extends StatelessWidget {
     return StreamBuilder<FieldNote?>(
       stream: noteRepo.watchNoteById(noteId),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Field Note Load Error')),
+            body: Center(
+              child: Text('Could not load field note: ${snapshot.error}'),
+            ),
+          );
+        }
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -62,7 +70,10 @@ class NoteDetailsScreen extends StatelessWidget {
                 onPressed: () => context.push('/notes/${note.id}/edit'),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: AppColors.syncError),
+                icon: const Icon(
+                  Icons.delete_outline,
+                  color: AppColors.syncError,
+                ),
                 tooltip: 'Delete Note',
                 onPressed: () => _confirmDelete(context, note, noteRepo),
               ),
@@ -99,7 +110,10 @@ class NoteDetailsScreen extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         'Recorded ${_formatDate(note.recordedAt)}',
-                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                        ),
                       ),
                       const SizedBox(height: 16),
                       const Divider(),
@@ -117,10 +131,15 @@ class NoteDetailsScreen extends StatelessWidget {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.location_on_outlined, size: 16, color: AppColors.secondary),
+                                  const Icon(
+                                    Icons.location_on_outlined,
+                                    size: 16,
+                                    color: AppColors.secondary,
+                                  ),
                                   const SizedBox(width: 6),
                                   InkWell(
-                                    onTap: () => context.push('/sites/${site.id}'),
+                                    onTap: () =>
+                                        context.push('/sites/${site.id}'),
                                     child: Text(
                                       site.siteName,
                                       style: const TextStyle(
@@ -134,22 +153,33 @@ class NoteDetailsScreen extends StatelessWidget {
                               ),
                               const SizedBox(height: 6),
                               FutureBuilder<Customer?>(
-                                future: customerDao.getCustomerById(site.customerId),
+                                future: customerDao.getCustomerById(
+                                  site.customerId,
+                                ),
                                 builder: (context, custSnap) {
                                   final customer = custSnap.data;
-                                  if (customer == null) return const SizedBox.shrink();
+                                  if (customer == null) {
+                                    return const SizedBox.shrink();
+                                  }
                                   return Row(
                                     children: [
-                                      const Icon(Icons.business_outlined, size: 16, color: AppColors.textMuted),
+                                      const Icon(
+                                        Icons.business_outlined,
+                                        size: 16,
+                                        color: AppColors.textMuted,
+                                      ),
                                       const SizedBox(width: 6),
                                       InkWell(
-                                        onTap: () => context.push('/customers/${customer.id}'),
+                                        onTap: () => context.push(
+                                          '/customers/${customer.id}',
+                                        ),
                                         child: Text(
                                           customer.name,
                                           style: const TextStyle(
                                             fontSize: 13,
                                             color: AppColors.textSecondary,
-                                            decoration: TextDecoration.underline,
+                                            decoration:
+                                                TextDecoration.underline,
                                           ),
                                         ),
                                       ),
@@ -168,7 +198,8 @@ class NoteDetailsScreen extends StatelessWidget {
                 const SizedBox(height: 16),
 
                 // Description Card
-                if (note.description != null && note.description!.trim().isNotEmpty) ...[
+                if (note.description != null &&
+                    note.description!.trim().isNotEmpty) ...[
                   AppCard(
                     padding: const EdgeInsets.all(18),
                     child: Column(
@@ -216,7 +247,10 @@ class NoteDetailsScreen extends StatelessWidget {
                               ),
                             ),
                             TextButton.icon(
-                              onPressed: () => context.push('/photo-viewer', extra: note.photoPath!),
+                              onPressed: () => context.push(
+                                '/photo-viewer',
+                                extra: note.photoPath!,
+                              ),
                               icon: const Icon(Icons.fullscreen, size: 18),
                               label: const Text('Fullscreen'),
                             ),
@@ -224,7 +258,10 @@ class NoteDetailsScreen extends StatelessWidget {
                         ),
                         const SizedBox(height: 8),
                         GestureDetector(
-                          onTap: () => context.push('/photo-viewer', extra: note.photoPath!),
+                          onTap: () => context.push(
+                            '/photo-viewer',
+                            extra: note.photoPath!,
+                          ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(10),
                             child: Image.file(
@@ -237,7 +274,9 @@ class NoteDetailsScreen extends StatelessWidget {
                                   height: 120,
                                   color: AppColors.surfaceSubtle,
                                   child: const Center(
-                                    child: Text('Photo pending server download or removed locally.'),
+                                    child: Text(
+                                      'Photo pending server download or removed locally.',
+                                    ),
                                   ),
                                 );
                               },
@@ -274,7 +313,11 @@ class NoteDetailsScreen extends StatelessWidget {
                                 color: AppColors.primary.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: const Icon(Icons.my_location, color: AppColors.primary, size: 20),
+                              child: const Icon(
+                                Icons.my_location,
+                                color: AppColors.primary,
+                                size: 20,
+                              ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -283,11 +326,17 @@ class NoteDetailsScreen extends StatelessWidget {
                                 children: [
                                   Text(
                                     '${note.lat!.toStringAsFixed(6)}, ${note.lng!.toStringAsFixed(6)}',
-                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                    ),
                                   ),
                                   const Text(
                                     'Accurate Device Geotag',
-                                    style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary,
+                                    ),
                                   ),
                                 ],
                               ),
@@ -319,7 +368,11 @@ class NoteDetailsScreen extends StatelessWidget {
     );
   }
 
-  void _confirmDelete(BuildContext context, FieldNote note, FieldNoteRepository repo) {
+  void _confirmDelete(
+    BuildContext context,
+    FieldNote note,
+    FieldNoteRepository repo,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -336,15 +389,25 @@ class NoteDetailsScreen extends StatelessWidget {
             style: TextButton.styleFrom(foregroundColor: AppColors.syncError),
             onPressed: () async {
               Navigator.of(ctx).pop();
-              await repo.deleteNote(note);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Field note "${note.title}" deleted.'),
-                    backgroundColor: AppColors.syncError,
-                  ),
-                );
-                context.pop();
+              try {
+                await repo.deleteNote(note);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Field note "${note.title}" deleted.'),
+                      backgroundColor: AppColors.syncError,
+                    ),
+                  );
+                  context.pop();
+                }
+              } catch (error) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Could not delete field note: $error'),
+                    ),
+                  );
+                }
               }
             },
             child: const Text('Delete'),
@@ -358,4 +421,3 @@ class NoteDetailsScreen extends StatelessWidget {
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} at ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 }
-

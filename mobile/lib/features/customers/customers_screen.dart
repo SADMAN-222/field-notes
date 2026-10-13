@@ -53,12 +53,19 @@ class _CustomersScreenState extends State<CustomersScreen> {
           // Search & Filter header
           Container(
             color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 10.0,
+            ),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Search customers...',
-                prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.textMuted),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 20,
+                  color: AppColors.textMuted,
+                ),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear, size: 18),
@@ -68,7 +75,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         },
                       )
                     : null,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
               ),
               onChanged: (val) {
                 setState(() => _searchQuery = val.trim());
@@ -89,18 +99,29 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Could not load customers: ${snapshot.error}',
+                      ),
+                    );
+                  }
 
                   final customers = snapshot.data ?? [];
 
                   if (customers.isEmpty) {
                     return EmptyStateView(
                       icon: Icons.people_outline,
-                      title: _searchQuery.isEmpty ? 'No Customers Found' : 'No Results Found',
+                      title: _searchQuery.isEmpty
+                          ? 'No Customers Found'
+                          : 'No Results Found',
                       subtitle: _searchQuery.isEmpty
                           ? 'Add your first customer to start tracking sites and inspection notes.'
                           : 'Try modifying your search query.',
                       actionLabel: _searchQuery.isEmpty ? 'Add Customer' : null,
-                      onAction: _searchQuery.isEmpty ? () => context.push('/customers/new') : null,
+                      onAction: _searchQuery.isEmpty
+                          ? () => context.push('/customers/new')
+                          : null,
                     );
                   }
 
@@ -119,7 +140,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                               width: 44,
                               height: 44,
                               decoration: BoxDecoration(
-                                color: AppColors.primaryLight.withValues(alpha: 0.15),
+                                color: AppColors.primaryLight.withValues(
+                                  alpha: 0.15,
+                                ),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: const Icon(
@@ -145,7 +168,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   ),
                                   const SizedBox(height: 4),
                                   if (customer.contactInformation != null &&
-                                      customer.contactInformation!.trim().isNotEmpty) ...[
+                                      customer.contactInformation!
+                                          .trim()
+                                          .isNotEmpty) ...[
                                     Text(
                                       customer.contactInformation!,
                                       style: const TextStyle(
@@ -158,13 +183,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                     const SizedBox(height: 6),
                                   ],
                                   FutureBuilder<List<Site>>(
-                                    future: sitesDao.getSitesByCustomer(customer.id),
+                                    future: sitesDao.getSitesByCustomer(
+                                      customer.id,
+                                    ),
                                     builder: (context, siteSnap) {
                                       final count = siteSnap.data?.length ?? 0;
                                       return Row(
                                         children: [
-                                          const Icon(Icons.location_city_outlined,
-                                              size: 14, color: AppColors.textMuted),
+                                          const Icon(
+                                            Icons.location_city_outlined,
+                                            size: 14,
+                                            color: AppColors.textMuted,
+                                          ),
                                           const SizedBox(width: 4),
                                           Text(
                                             '$count ${count == 1 ? "site" : "sites"}',

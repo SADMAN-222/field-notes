@@ -26,7 +26,13 @@ class _NotesScreenState extends State<NotesScreen> {
   String _searchQuery = '';
   String _selectedStatus = 'ALL';
 
-  final List<String> _statusFilters = ['ALL', 'DRAFT', 'SUBMITTED', 'COMPLETED', 'CANCELLED'];
+  final List<String> _statusFilters = [
+    'ALL',
+    'DRAFT',
+    'SUBMITTED',
+    'COMPLETED',
+    'CANCELLED',
+  ];
 
   @override
   void dispose() {
@@ -62,12 +68,19 @@ class _NotesScreenState extends State<NotesScreen> {
           // Search input
           Container(
             color: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 16.0,
+              vertical: 8.0,
+            ),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Search notes by title or notes...',
-                prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.textMuted),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  size: 20,
+                  color: AppColors.textMuted,
+                ),
                 suffixIcon: _searchQuery.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear, size: 18),
@@ -77,7 +90,10 @@ class _NotesScreenState extends State<NotesScreen> {
                         },
                       )
                     : null,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 10,
+                ),
               ),
               onChanged: (val) {
                 setState(() => _searchQuery = val.trim());
@@ -133,6 +149,13 @@ class _NotesScreenState extends State<NotesScreen> {
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
+                  if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Could not load field notes: ${snapshot.error}',
+                      ),
+                    );
+                  }
 
                   final notes = snapshot.data ?? [];
 
@@ -140,14 +163,20 @@ class _NotesScreenState extends State<NotesScreen> {
                     return EmptyStateView(
                       icon: Icons.assignment_outlined,
                       title: 'No Field Notes Found',
-                      subtitle: _searchQuery.isNotEmpty || _selectedStatus != 'ALL'
+                      subtitle:
+                          _searchQuery.isNotEmpty || _selectedStatus != 'ALL'
                           ? 'Try clearing active filters to see all notes.'
                           : 'Create your first field note with photos, GPS, and inspection data.',
-                      actionLabel: _searchQuery.isEmpty && _selectedStatus == 'ALL' ? 'Create Note' : null,
+                      actionLabel:
+                          _searchQuery.isEmpty && _selectedStatus == 'ALL'
+                          ? 'Create Note'
+                          : null,
                       onAction: _searchQuery.isEmpty && _selectedStatus == 'ALL'
-                          ? () => context.push(widget.siteId != null
-                              ? '/notes/new?siteId=${widget.siteId}'
-                              : '/notes/new')
+                          ? () => context.push(
+                              widget.siteId != null
+                                  ? '/notes/new?siteId=${widget.siteId}'
+                                  : '/notes/new',
+                            )
                           : null,
                     );
                   }
@@ -173,7 +202,8 @@ class _NotesScreenState extends State<NotesScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Expanded(
                                         child: Text(
@@ -192,7 +222,8 @@ class _NotesScreenState extends State<NotesScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 4),
-                                  if (note.description != null && note.description!.trim().isNotEmpty) ...[
+                                  if (note.description != null &&
+                                      note.description!.trim().isNotEmpty) ...[
                                     Text(
                                       note.description!,
                                       style: const TextStyle(
@@ -208,31 +239,45 @@ class _NotesScreenState extends State<NotesScreen> {
                                     children: [
                                       // Site Name
                                       FutureBuilder<Site?>(
-                                        future: sitesDao.getSiteById(note.siteId),
+                                        future: sitesDao.getSiteById(
+                                          note.siteId,
+                                        ),
                                         builder: (context, siteSnap) {
-                                          final siteName = siteSnap.data?.siteName ?? 'Site';
+                                          final siteName =
+                                              siteSnap.data?.siteName ?? 'Site';
                                           return Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 2,
+                                            ),
                                             decoration: BoxDecoration(
                                               color: AppColors.surfaceSubtle,
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: Border.all(color: AppColors.border),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                              border: Border.all(
+                                                color: AppColors.border,
+                                              ),
                                             ),
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                const Icon(Icons.location_on_outlined,
-                                                    size: 11, color: AppColors.textMuted),
+                                                const Icon(
+                                                  Icons.location_on_outlined,
+                                                  size: 11,
+                                                  color: AppColors.textMuted,
+                                                ),
                                                 const SizedBox(width: 2),
                                                 Text(
                                                   siteName,
                                                   style: const TextStyle(
                                                     fontSize: 11,
                                                     fontWeight: FontWeight.w500,
-                                                    color: AppColors.textSecondary,
+                                                    color:
+                                                        AppColors.textSecondary,
                                                   ),
                                                   maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
                                                 ),
                                               ],
                                             ),
@@ -241,8 +286,13 @@ class _NotesScreenState extends State<NotesScreen> {
                                       ),
                                       const Spacer(),
                                       // Date & GPS
-                                      if (note.lat != null && note.lng != null) ...[
-                                        const Icon(Icons.my_location, size: 12, color: AppColors.primary),
+                                      if (note.lat != null &&
+                                          note.lng != null) ...[
+                                        const Icon(
+                                          Icons.my_location,
+                                          size: 12,
+                                          color: AppColors.primary,
+                                        ),
                                         const SizedBox(width: 4),
                                       ],
                                       Text(
@@ -269,9 +319,11 @@ class _NotesScreenState extends State<NotesScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push(widget.siteId != null
-            ? '/notes/new?siteId=${widget.siteId}'
-            : '/notes/new'),
+        onPressed: () => context.push(
+          widget.siteId != null
+              ? '/notes/new?siteId=${widget.siteId}'
+              : '/notes/new',
+        ),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         child: const Icon(Icons.add),
@@ -307,7 +359,11 @@ class _NotesScreenState extends State<NotesScreen> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppColors.border),
       ),
-      child: const Icon(Icons.assignment_outlined, color: AppColors.primary, size: 22),
+      child: const Icon(
+        Icons.assignment_outlined,
+        color: AppColors.primary,
+        size: 22,
+      ),
     );
   }
 

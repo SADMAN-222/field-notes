@@ -1,20 +1,16 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/security/secure_storage.dart';
 import '../../core/network/api_client.dart';
-import '../../core/database/database.dart';
 import '../../core/storage/preferences_service.dart';
 
 class AuthRepository {
   final ApiClient apiClient;
   final SecureStorage secureStorage;
   final PreferencesService preferencesService;
-  final AppDatabase db;
-
   AuthRepository({
     required this.apiClient,
     required this.secureStorage,
     required this.preferencesService,
-    required this.db,
   });
 
   SupabaseClient get _supabase => Supabase.instance.client;
@@ -56,20 +52,17 @@ class AuthRepository {
   }
 
   Future<void> logout() async {
+    Object? signOutError;
     try {
       await _supabase.auth.signOut();
-    } catch (_) {}
+    } catch (error) {
+      signOutError = error;
+    }
     await secureStorage.clearAll();
     await preferencesService.clearUserPreferences();
-
-    // Clear local database tables safely
-    await db.transaction(() async {
-      await db.delete(db.customers).go();
-      await db.delete(db.sites).go();
-      await db.delete(db.fieldNotes).go();
-      await db.delete(db.syncOutbox).go();
-      await db.delete(db.syncMetadata).go();
-    });
+    if (signOutError != null) {
+      throw StateError('Supabase sign-out failed: $signOutError');
+    }
   }
 
   Future<bool> isLoggedIn() async {
@@ -85,6 +78,8 @@ class AuthRepository {
   }
 
   Future<String?> getUserEmail() async {
-    return _supabase.auth.currentUser?.email ?? await secureStorage.getUserEmail() ?? preferencesService.userEmail;
+    return _supabase.auth.currentUser?.email ??
+        await secureStorage.getUserEmail() ??
+        preferencesService.userEmail;
   }
 }

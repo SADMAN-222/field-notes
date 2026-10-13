@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/drift.dart' show Value;
@@ -41,139 +42,260 @@ void main() {
     await db.close();
   });
 
+  test(
+    'dashboard count streams emit scoped local counts after inserts',
+    () async {
+      const userId = 'user-abc';
+      final now = DateTime.now();
+
+      final customerCounts = StreamIterator(
+        customerDao.watchCustomerCount(userId),
+      );
+      expect(await customerCounts.moveNext(), isTrue);
+      expect(customerCounts.current, 0);
+      await customerRepo.addCustomer(
+        Customer(
+          id: 'dashboard-customer',
+          userId: userId,
+          name: 'Dashboard Customer',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+      );
+      expect(await customerCounts.moveNext(), isTrue);
+      expect(customerCounts.current, 1);
+      await customerCounts.cancel();
+
+      final siteCounts = StreamIterator(sitesDao.watchSiteCount(userId));
+      expect(await siteCounts.moveNext(), isTrue);
+      expect(siteCounts.current, 0);
+      await siteRepo.addSite(
+        Site(
+          id: 'dashboard-site',
+          userId: userId,
+          customerId: 'dashboard-customer',
+          siteName: 'Dashboard Site',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+      );
+      expect(await siteCounts.moveNext(), isTrue);
+      expect(siteCounts.current, 1);
+      await siteCounts.cancel();
+
+      final noteCounts = StreamIterator(fieldNotesDao.watchNotesCount(userId));
+      expect(await noteCounts.moveNext(), isTrue);
+      expect(noteCounts.current, 0);
+      await fieldNoteRepo.addNote(
+        FieldNote(
+          id: 'dashboard-note',
+          userId: userId,
+          siteId: 'dashboard-site',
+          title: 'Dashboard Note',
+          status: 'DRAFT',
+          recordedAt: now,
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+      );
+      expect(await noteCounts.moveNext(), isTrue);
+      expect(noteCounts.current, 1);
+      await noteCounts.cancel();
+
+      await customerRepo.addCustomer(
+        Customer(
+          id: 'other-user-customer',
+          userId: 'user-def',
+          name: 'Other User Customer',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+      );
+      expect(await customerDao.getCustomerCount(userId), 1);
+      expect(await customerDao.getCustomerCount('user-def'), 1);
+    },
+  );
+
+  test('outbox exposes pending and failed counts independently', () async {
+    final pendingId = await db
+        .into(db.syncOutbox)
+        .insert(
+          SyncOutboxCompanion.insert(
+            entityType: 'customer',
+            entityId: 'queued-customer',
+            operation: 'CREATE',
+            createdAt: DateTime.now(),
+          ),
+        );
+
+    expect(await outboxDao.watchPendingCount().first, 1);
+    expect(await outboxDao.watchFailedCount().first, 0);
+
+    await outboxDao.markFailed(pendingId, 'server unavailable');
+
+    expect(await outboxDao.watchPendingCount().first, 0);
+    expect(await outboxDao.watchFailedCount().first, 1);
+  });
+
   group('CustomerDao & CustomerRepository Offline CRUD & Outbox Queue', () {
     const userId = 'user-abc';
     final now = DateTime.now();
 
-    test('addCustomer persists customer and enqueues CREATE outbox entry', () async {
-      final customer = Customer(
-        id: 'cust-1',
-        userId: userId,
-        name: 'Acme Corporation',
-        contactInformation: 'contact@acme.com | 555-0100',
-        createdAt: now,
-        updatedAt: now,
-        version: 0,
-      );
+    test(
+      'addCustomer persists customer and enqueues CREATE outbox entry',
+      () async {
+        final customer = Customer(
+          id: 'cust-1',
+          userId: userId,
+          name: 'Acme Corporation',
+          contactInformation: 'contact@acme.com | 555-0100',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        );
 
-      await customerRepo.addCustomer(customer);
+        await customerRepo.addCustomer(customer);
 
-      final fetched = await customerRepo.getCustomerById('cust-1');
-      expect(fetched, isNotNull);
-      expect(fetched!.name, equals('Acme Corporation'));
-      expect(fetched.contactInformation, equals('contact@acme.com | 555-0100'));
+        final fetched = await customerRepo.getCustomerById('cust-1');
+        expect(fetched, isNotNull);
+        expect(fetched!.name, equals('Acme Corporation'));
+        expect(
+          fetched.contactInformation,
+          equals('contact@acme.com | 555-0100'),
+        );
 
-      final allCustomers = await customerRepo.getAllCustomers(userId);
-      expect(allCustomers.length, equals(1));
-      expect(allCustomers.first.id, equals('cust-1'));
+        final allCustomers = await customerRepo.getAllCustomers(userId);
+        expect(allCustomers.length, equals(1));
+        expect(allCustomers.first.id, equals('cust-1'));
 
-      final count = await customerRepo.getCustomerCount(userId);
-      expect(count, equals(1));
+        final count = await customerRepo.getCustomerCount(userId);
+        expect(count, equals(1));
 
-      // Check Outbox
-      final outboxEntries = await outboxDao.getPendingEntries();
-      expect(outboxEntries.length, equals(1));
-      final entry = outboxEntries.first;
-      expect(entry.entityType, equals('customer'));
-      expect(entry.entityId, equals('cust-1'));
-      expect(entry.operation, equals('CREATE'));
-      expect(entry.state, equals('PENDING'));
+        // Check Outbox
+        final outboxEntries = await outboxDao.getPendingEntries();
+        expect(outboxEntries.length, equals(1));
+        final entry = outboxEntries.first;
+        expect(entry.entityType, equals('customer'));
+        expect(entry.entityId, equals('cust-1'));
+        expect(entry.operation, equals('CREATE'));
+        expect(entry.state, equals('PENDING'));
 
-      final payload = jsonDecode(entry.payload!) as Map<String, dynamic>;
-      expect(payload['id'], equals('cust-1'));
-      expect(payload['name'], equals('Acme Corporation'));
-    });
+        final payload = jsonDecode(entry.payload!) as Map<String, dynamic>;
+        expect(payload['id'], equals('cust-1'));
+        expect(payload['name'], equals('Acme Corporation'));
+      },
+    );
 
-    test('updateCustomer updates database record and enqueues UPDATE outbox entry', () async {
-      final customer = Customer(
-        id: 'cust-2',
-        userId: userId,
-        name: 'Beta Global',
-        contactInformation: 'info@beta.com',
-        createdAt: now,
-        updatedAt: now,
-        version: 0,
-      );
-      await customerRepo.addCustomer(customer);
+    test(
+      'updateCustomer updates database record and enqueues UPDATE outbox entry',
+      () async {
+        final customer = Customer(
+          id: 'cust-2',
+          userId: userId,
+          name: 'Beta Global',
+          contactInformation: 'info@beta.com',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        );
+        await customerRepo.addCustomer(customer);
 
-      final updated = customer.copyWith(
-        name: 'Beta Global Industries',
-        contactInformation: const Value('new-info@beta.com'),
-        version: 1,
-        updatedAt: DateTime.now(),
-      );
-      await customerRepo.updateCustomer(updated);
+        final updated = customer.copyWith(
+          name: 'Beta Global Industries',
+          contactInformation: const Value('new-info@beta.com'),
+          version: 1,
+          updatedAt: DateTime.now(),
+        );
+        await customerRepo.updateCustomer(updated);
 
-      final fetched = await customerRepo.getCustomerById('cust-2');
-      expect(fetched!.name, equals('Beta Global Industries'));
-      expect(fetched.contactInformation, equals('new-info@beta.com'));
+        final fetched = await customerRepo.getCustomerById('cust-2');
+        expect(fetched!.name, equals('Beta Global Industries'));
+        expect(fetched.contactInformation, equals('new-info@beta.com'));
 
-      final outboxEntries = await outboxDao.getPendingEntries();
-      expect(outboxEntries.length, equals(2));
-      expect(outboxEntries[1].operation, equals('UPDATE'));
-      expect(outboxEntries[1].expectedVersion, equals(1));
-    });
+        final outboxEntries = await outboxDao.getPendingEntries();
+        expect(outboxEntries.length, equals(2));
+        expect(outboxEntries[1].operation, equals('UPDATE'));
+        expect(outboxEntries[1].expectedVersion, equals(1));
+      },
+    );
 
-    test('deleteCustomer sets deletedAt and enqueues DELETE outbox entry', () async {
-      final customer = Customer(
-        id: 'cust-3',
-        userId: userId,
-        name: 'Gamma Tech',
-        contactInformation: 'support@gamma.com',
-        createdAt: now,
-        updatedAt: now,
-        version: 0,
-      );
-      await customerRepo.addCustomer(customer);
+    test(
+      'deleteCustomer sets deletedAt and enqueues DELETE outbox entry',
+      () async {
+        final customer = Customer(
+          id: 'cust-3',
+          userId: userId,
+          name: 'Gamma Tech',
+          contactInformation: 'support@gamma.com',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        );
+        await customerRepo.addCustomer(customer);
 
-      await customerRepo.deleteCustomer(customer);
+        await customerRepo.deleteCustomer(customer);
 
-      // Active customer list should now be empty
-      final allCustomers = await customerRepo.getAllCustomers(userId);
-      expect(allCustomers, isEmpty);
+        // Active customer list should now be empty
+        final allCustomers = await customerRepo.getAllCustomers(userId);
+        expect(allCustomers, isEmpty);
 
-      final count = await customerRepo.getCustomerCount(userId);
-      expect(count, equals(0));
+        final count = await customerRepo.getCustomerCount(userId);
+        expect(count, equals(0));
 
-      // But row still exists in DB with deletedAt timestamp
-      final directRow = await customerRepo.getCustomerById('cust-3');
-      expect(directRow, isNotNull);
-      expect(directRow!.deletedAt, isNotNull);
+        // But row still exists in DB with deletedAt timestamp
+        final directRow = await customerRepo.getCustomerById('cust-3');
+        expect(directRow, isNotNull);
+        expect(directRow!.deletedAt, isNotNull);
 
-      final outboxEntries = await outboxDao.getPendingEntries();
-      expect(outboxEntries.length, equals(2));
-      expect(outboxEntries[1].operation, equals('DELETE'));
-    });
+        final outboxEntries = await outboxDao.getPendingEntries();
+        expect(outboxEntries.length, equals(2));
+        expect(outboxEntries[1].operation, equals('DELETE'));
+      },
+    );
 
     test('searchCustomers filters by name or contact', () async {
-      await customerRepo.addCustomer(Customer(
-        id: 'c1',
-        userId: userId,
-        name: 'Solar Energy Labs',
-        contactInformation: 'hello@solarlabs.com',
-        createdAt: now,
-        updatedAt: now,
-        version: 0,
-      ));
-      await customerRepo.addCustomer(Customer(
-        id: 'c2',
-        userId: userId,
-        name: 'Wind Turbines Inc',
-        contactInformation: 'service@wind.org',
-        createdAt: now,
-        updatedAt: now,
-        version: 0,
-      ));
+      await customerRepo.addCustomer(
+        Customer(
+          id: 'c1',
+          userId: userId,
+          name: 'Solar Energy Labs',
+          contactInformation: 'hello@solarlabs.com',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+      );
+      await customerRepo.addCustomer(
+        Customer(
+          id: 'c2',
+          userId: userId,
+          name: 'Wind Turbines Inc',
+          contactInformation: 'service@wind.org',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+      );
 
-      final searchSolar = await customerRepo.searchCustomers(userId, 'solar').first;
+      final searchSolar = await customerRepo
+          .searchCustomers(userId, 'solar')
+          .first;
       expect(searchSolar.length, equals(1));
       expect(searchSolar.first.id, equals('c1'));
 
-      final searchOrg = await customerRepo.searchCustomers(userId, 'wind.org').first;
+      final searchOrg = await customerRepo
+          .searchCustomers(userId, 'wind.org')
+          .first;
       expect(searchOrg.length, equals(1));
       expect(searchOrg.first.id, equals('c2'));
 
-      final searchNone = await customerRepo.searchCustomers(userId, 'nuclear').first;
+      final searchNone = await customerRepo
+          .searchCustomers(userId, 'nuclear')
+          .first;
       expect(searchNone, isEmpty);
     });
   });
@@ -268,26 +390,30 @@ void main() {
     });
 
     test('searchSites finds matches by name or address', () async {
-      await siteRepo.addSite(Site(
-        id: 's1',
-        userId: userId,
-        customerId: customerId,
-        siteName: 'Alpha Building',
-        address: '77 Broad St',
-        createdAt: now,
-        updatedAt: now,
-        version: 0,
-      ));
-      await siteRepo.addSite(Site(
-        id: 's2',
-        userId: userId,
-        customerId: customerId,
-        siteName: 'Beta Tower',
-        address: '100 Broadway',
-        createdAt: now,
-        updatedAt: now,
-        version: 0,
-      ));
+      await siteRepo.addSite(
+        Site(
+          id: 's1',
+          userId: userId,
+          customerId: customerId,
+          siteName: 'Alpha Building',
+          address: '77 Broad St',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+      );
+      await siteRepo.addSite(
+        Site(
+          id: 's2',
+          userId: userId,
+          customerId: customerId,
+          siteName: 'Beta Tower',
+          address: '100 Broadway',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+      );
 
       final matchAlpha = await siteRepo.searchSites(userId, 'alpha').first;
       expect(matchAlpha.length, equals(1));
@@ -332,17 +458,28 @@ void main() {
       final siteNotes = await fieldNoteRepo.watchNotes(siteId).first;
       expect(siteNotes.length, equals(1));
 
-      final countSubmitted = await fieldNoteRepo.getNotesCount(userId, status: 'SUBMITTED');
+      final countSubmitted = await fieldNoteRepo.getNotesCount(
+        userId,
+        status: 'SUBMITTED',
+      );
       expect(countSubmitted, equals(1));
 
-      final countDraft = await fieldNoteRepo.getNotesCount(userId, status: 'DRAFT');
+      final countDraft = await fieldNoteRepo.getNotesCount(
+        userId,
+        status: 'DRAFT',
+      );
       expect(countDraft, equals(0));
 
       final outbox = await outboxDao.getPendingEntries();
-      expect(outbox.length, equals(1));
+      expect(outbox.length, equals(2));
       expect(outbox.first.entityType, equals('note'));
       expect(outbox.first.entityId, equals('note-1'));
       expect(outbox.first.operation, equals('CREATE'));
+      expect(outbox.last.entityType, equals('photo'));
+      expect(
+        (jsonDecode(outbox.last.payload!) as Map<String, dynamic>)['photoPath'],
+        equals('/local/cache/photo_1.jpg'),
+      );
     });
 
     test('updateNote updates field note and adds UPDATE outbox item', () async {
@@ -403,42 +540,52 @@ void main() {
     });
 
     test('watchAllNotes supports filtering by status and query', () async {
-      await fieldNoteRepo.addNote(FieldNote(
-        id: 'n1',
-        userId: userId,
-        siteId: siteId,
-        title: 'Transformer Maintenance',
-        description: 'Replaced coolant filter',
-        status: 'SYNCED',
-        recordedAt: now,
-        createdAt: now,
-        updatedAt: now,
-        version: 0,
-      ));
-      await fieldNoteRepo.addNote(FieldNote(
-        id: 'n2',
-        userId: userId,
-        siteId: siteId,
-        title: 'HVAC Duct Clean',
-        description: 'Filter clean complete',
-        status: 'DRAFT',
-        recordedAt: now,
-        createdAt: now,
-        updatedAt: now,
-        version: 0,
-      ));
+      await fieldNoteRepo.addNote(
+        FieldNote(
+          id: 'n1',
+          userId: userId,
+          siteId: siteId,
+          title: 'Transformer Maintenance',
+          description: 'Replaced coolant filter',
+          status: 'SYNCED',
+          recordedAt: now,
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+      );
+      await fieldNoteRepo.addNote(
+        FieldNote(
+          id: 'n2',
+          userId: userId,
+          siteId: siteId,
+          title: 'HVAC Duct Clean',
+          description: 'Filter clean complete',
+          status: 'DRAFT',
+          recordedAt: now,
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+      );
 
       // Filter by status
-      final syncedNotes = await fieldNoteRepo.watchAllNotes(userId, status: 'SYNCED').first;
+      final syncedNotes = await fieldNoteRepo
+          .watchAllNotes(userId, status: 'SYNCED')
+          .first;
       expect(syncedNotes.length, equals(1));
       expect(syncedNotes.first.id, equals('n1'));
 
-      final draftNotes = await fieldNoteRepo.watchAllNotes(userId, status: 'DRAFT').first;
+      final draftNotes = await fieldNoteRepo
+          .watchAllNotes(userId, status: 'DRAFT')
+          .first;
       expect(draftNotes.length, equals(1));
       expect(draftNotes.first.id, equals('n2'));
 
       // Filter by search query
-      final filterNotes = await fieldNoteRepo.watchAllNotes(userId, query: 'coolant').first;
+      final filterNotes = await fieldNoteRepo
+          .watchAllNotes(userId, query: 'coolant')
+          .first;
       expect(filterNotes.length, equals(1));
       expect(filterNotes.first.id, equals('n1'));
     });
@@ -447,15 +594,17 @@ void main() {
   group('OutboxDao State Transitions', () {
     test('markFailed, retryAllFailed, and removeEntries behavior', () async {
       // Add a dummy entry
-      await customerRepo.addCustomer(Customer(
-        id: 'cust-x',
-        userId: 'user-x',
-        name: 'Test Co',
-        contactInformation: 'test@co.com',
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-        version: 0,
-      ));
+      await customerRepo.addCustomer(
+        Customer(
+          id: 'cust-x',
+          userId: 'user-x',
+          name: 'Test Co',
+          contactInformation: 'test@co.com',
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          version: 0,
+        ),
+      );
 
       final pendingBefore = await outboxDao.getPendingEntries();
       expect(pendingBefore.length, equals(1));

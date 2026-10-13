@@ -17,6 +17,14 @@ class OutboxDao {
     return query.map((row) => row.read(countExp) ?? 0).watchSingle();
   }
 
+  Stream<int> watchFailedCount() {
+    final countExp = db.syncOutbox.id.count();
+    final query = db.selectOnly(db.syncOutbox)
+      ..where(db.syncOutbox.state.equals('FAILED'))
+      ..addColumns([countExp]);
+    return query.map((row) => row.read(countExp) ?? 0).watchSingle();
+  }
+
   Future<List<SyncOutboxEntry>> getPendingEntries() {
     return (db.select(db.syncOutbox)
           ..where((t) => t.state.equals('PENDING'))
@@ -53,4 +61,3 @@ class OutboxDao {
     await db.delete(db.syncOutbox).go();
   }
 }
-

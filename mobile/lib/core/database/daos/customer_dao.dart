@@ -51,6 +51,14 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
     return await query.map((row) => row.read(countExp)).getSingle() ?? 0;
   }
 
+  Stream<int> watchCustomerCount(String userId) {
+    final countExp = customers.id.count();
+    final query = selectOnly(customers)
+      ..where(customers.userId.equals(userId) & customers.deletedAt.isNull())
+      ..addColumns([countExp]);
+    return query.map((row) => row.read(countExp) ?? 0).watchSingle();
+  }
+
   Future<void> createCustomer(Customer customer) {
     return transaction(() async {
       await into(customers).insert(customer);

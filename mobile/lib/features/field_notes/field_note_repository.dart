@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import '../../core/database/database.dart';
 import '../../core/database/daos/field_notes_dao.dart';
 
@@ -34,8 +35,10 @@ class FieldNoteRepository {
   Future<int> getNotesCount(String userId, {String? status}) =>
       fieldNotesDao.getNotesCount(userId, status: status);
 
-  Future<void> addNote(FieldNote note) =>
-      fieldNotesDao.createNote(note);
+  Future<void> addNote(FieldNote note) {
+    debugPrint('FieldNoteRepository.addNote: ${note.userId}, ID: ${note.id}, Site: ${note.siteId}');
+    return fieldNotesDao.createNote(note);
+  }
 
   Future<void> updateNote(FieldNote note) =>
       fieldNotesDao.updateNote(note);

@@ -23,6 +23,12 @@ class SiteDetailsScreen extends StatelessWidget {
     return StreamBuilder<Site?>(
       stream: siteRepo.watchSiteById(siteId),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Site Load Error')),
+            body: Center(child: Text('Could not load site: ${snapshot.error}')),
+          );
+        }
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -61,7 +67,10 @@ class SiteDetailsScreen extends StatelessWidget {
                 onPressed: () => context.push('/sites/${site.id}/edit'),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: AppColors.syncError),
+                icon: const Icon(
+                  Icons.delete_outline,
+                  color: AppColors.syncError,
+                ),
                 tooltip: 'Delete Site',
                 onPressed: () => _confirmDelete(context, site, siteRepo),
               ),
@@ -84,10 +93,16 @@ class SiteDetailsScreen extends StatelessWidget {
                             width: 48,
                             height: 48,
                             decoration: BoxDecoration(
-                              color: AppColors.secondary.withValues(alpha: 0.12),
+                              color: AppColors.secondary.withValues(
+                                alpha: 0.12,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.location_city_outlined, color: AppColors.secondary, size: 26),
+                            child: const Icon(
+                              Icons.location_city_outlined,
+                              color: AppColors.secondary,
+                              size: 26,
+                            ),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -104,18 +119,32 @@ class SiteDetailsScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 2),
                                 FutureBuilder<Customer?>(
-                                  future: customerDao.getCustomerById(site.customerId),
+                                  future: customerDao.getCustomerById(
+                                    site.customerId,
+                                  ),
                                   builder: (context, custSnap) {
                                     final customer = custSnap.data;
                                     if (customer == null) {
-                                      return const Text('Customer', style: TextStyle(fontSize: 12, color: AppColors.textSecondary));
+                                      return const Text(
+                                        'Customer',
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      );
                                     }
                                     return InkWell(
-                                      onTap: () => context.push('/customers/${customer.id}'),
+                                      onTap: () => context.push(
+                                        '/customers/${customer.id}',
+                                      ),
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          const Icon(Icons.business_outlined, size: 13, color: AppColors.primary),
+                                          const Icon(
+                                            Icons.business_outlined,
+                                            size: 13,
+                                            color: AppColors.primary,
+                                          ),
                                           const SizedBox(width: 4),
                                           Text(
                                             customer.name,
@@ -135,7 +164,8 @@ class SiteDetailsScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      if (site.address != null && site.address!.trim().isNotEmpty) ...[
+                      if (site.address != null &&
+                          site.address!.trim().isNotEmpty) ...[
                         const SizedBox(height: 16),
                         const Divider(),
                         const SizedBox(height: 12),
@@ -177,7 +207,8 @@ class SiteDetailsScreen extends StatelessWidget {
                       ),
                     ),
                     TextButton.icon(
-                      onPressed: () => context.push('/notes/new?siteId=${site.id}'),
+                      onPressed: () =>
+                          context.push('/notes/new?siteId=${site.id}'),
                       icon: const Icon(Icons.add, size: 18),
                       label: const Text('New Note'),
                     ),
@@ -189,8 +220,14 @@ class SiteDetailsScreen extends StatelessWidget {
                 StreamBuilder<List<FieldNote>>(
                   stream: fieldNotesDao.watchNotesBySite(site.id),
                   builder: (context, noteSnapshot) {
-                    if (noteSnapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
+                    if (noteSnapshot.connectionState ==
+                        ConnectionState.waiting) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
                     }
 
                     final notes = noteSnapshot.data ?? [];
@@ -199,21 +236,32 @@ class SiteDetailsScreen extends StatelessWidget {
                         padding: const EdgeInsets.all(24),
                         child: Column(
                           children: [
-                            const Icon(Icons.assignment_outlined, size: 36, color: AppColors.textMuted),
+                            const Icon(
+                              Icons.assignment_outlined,
+                              size: 36,
+                              color: AppColors.textMuted,
+                            ),
                             const SizedBox(height: 10),
                             const Text(
                               'No Field Notes Recorded',
-                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             const Text(
                               'Record site surveys, maintenance logs, and inspection photos.',
-                              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 13,
+                              ),
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 14),
                             ElevatedButton(
-                              onPressed: () => context.push('/notes/new?siteId=${site.id}'),
+                              onPressed: () =>
+                                  context.push('/notes/new?siteId=${site.id}'),
                               child: const Text('Record First Note'),
                             ),
                           ],
@@ -239,7 +287,9 @@ class SiteDetailsScreen extends StatelessWidget {
                                     border: Border.all(color: AppColors.border),
                                   ),
                                   child: Icon(
-                                    note.photoPath != null ? Icons.photo_outlined : Icons.description_outlined,
+                                    note.photoPath != null
+                                        ? Icons.photo_outlined
+                                        : Icons.description_outlined,
                                     color: AppColors.primary,
                                     size: 22,
                                   ),
@@ -247,7 +297,8 @@ class SiteDetailsScreen extends StatelessWidget {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         note.title,
@@ -269,10 +320,21 @@ class SiteDetailsScreen extends StatelessWidget {
                                               color: AppColors.textSecondary,
                                             ),
                                           ),
-                                          if (note.lat != null && note.lng != null) ...[
+                                          if (note.lat != null &&
+                                              note.lng != null) ...[
                                             const SizedBox(width: 8),
-                                            const Icon(Icons.location_on_outlined, size: 12, color: AppColors.textMuted),
-                                            const Text(' GPS', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                            const Icon(
+                                              Icons.location_on_outlined,
+                                              size: 12,
+                                              color: AppColors.textMuted,
+                                            ),
+                                            const Text(
+                                              ' GPS',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: AppColors.textMuted,
+                                              ),
+                                            ),
                                           ],
                                         ],
                                       ),
@@ -313,15 +375,23 @@ class SiteDetailsScreen extends StatelessWidget {
             style: TextButton.styleFrom(foregroundColor: AppColors.syncError),
             onPressed: () async {
               Navigator.of(ctx).pop();
-              await repo.deleteSite(site);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Site "${site.siteName}" deleted.'),
-                    backgroundColor: AppColors.syncError,
-                  ),
-                );
-                context.pop();
+              try {
+                await repo.deleteSite(site);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Site "${site.siteName}" deleted.'),
+                      backgroundColor: AppColors.syncError,
+                    ),
+                  );
+                  context.pop();
+                }
+              } catch (error) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Could not delete site: $error')),
+                  );
+                }
               }
             },
             child: const Text('Delete'),
@@ -335,4 +405,3 @@ class SiteDetailsScreen extends StatelessWidget {
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 }
-

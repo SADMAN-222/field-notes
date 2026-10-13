@@ -27,13 +27,22 @@ void main() {
 
     group('checkAuth', () {
       test('emits [AuthLoading, AuthAuthenticated] when logged in', () async {
-        when(() => mockAuthRepository.isLoggedIn()).thenAnswer((_) async => true);
-        when(() => mockAuthRepository.getUserId()).thenAnswer((_) async => 'user-123');
-        when(() => mockAuthRepository.getUserEmail()).thenAnswer((_) async => 'test@example.com');
+        when(
+          () => mockAuthRepository.isLoggedIn(),
+        ).thenAnswer((_) async => true);
+        when(
+          () => mockAuthRepository.getUserId(),
+        ).thenAnswer((_) async => 'user-123');
+        when(
+          () => mockAuthRepository.getUserEmail(),
+        ).thenAnswer((_) async => 'test@example.com');
 
         final expectedStates = [
           AuthLoading(),
-          const AuthAuthenticated(userId: 'user-123', email: 'test@example.com'),
+          const AuthAuthenticated(
+            userId: 'user-123',
+            email: 'test@example.com',
+          ),
         ];
 
         expectLater(authCubit.stream, emitsInOrder(expectedStates));
@@ -43,42 +52,56 @@ void main() {
         expect(authCubit.currentEmail, equals('test@example.com'));
       });
 
-      test('emits [AuthLoading, AuthUnauthenticated] when not logged in', () async {
-        when(() => mockAuthRepository.isLoggedIn()).thenAnswer((_) async => false);
+      test(
+        'emits [AuthLoading, AuthUnauthenticated] when not logged in',
+        () async {
+          when(
+            () => mockAuthRepository.isLoggedIn(),
+          ).thenAnswer((_) async => false);
 
-        final expectedStates = [
-          AuthLoading(),
-          AuthUnauthenticated(),
-        ];
+          final expectedStates = [AuthLoading(), AuthUnauthenticated()];
 
-        expectLater(authCubit.stream, emitsInOrder(expectedStates));
+          expectLater(authCubit.stream, emitsInOrder(expectedStates));
 
-        await authCubit.checkAuth();
-        expect(authCubit.currentUserId, isNull);
-      });
+          await authCubit.checkAuth();
+          expect(authCubit.currentUserId, isNull);
+        },
+      );
 
-      test('emits [AuthLoading, AuthUnauthenticated] on repository exception', () async {
-        when(() => mockAuthRepository.isLoggedIn()).thenThrow(Exception('Storage error'));
+      test(
+        'emits [AuthLoading, AuthError, AuthUnauthenticated] on repository exception',
+        () async {
+          when(
+            () => mockAuthRepository.isLoggedIn(),
+          ).thenThrow(Exception('Storage error'));
 
-        final expectedStates = [
-          AuthLoading(),
-          AuthUnauthenticated(),
-        ];
+          final expectedStates = [
+            AuthLoading(),
+            const AuthError('Exception: Storage error'),
+            AuthUnauthenticated(),
+          ];
 
-        expectLater(authCubit.stream, emitsInOrder(expectedStates));
+          expectLater(authCubit.stream, emitsInOrder(expectedStates));
 
-        await authCubit.checkAuth();
-      });
+          await authCubit.checkAuth();
+        },
+      );
     });
 
     group('login', () {
       test('emits [AuthLoading, AuthAuthenticated] on success', () async {
-        when(() => mockAuthRepository.login('admin@example.com', 'password123'))
-            .thenAnswer((_) async => {'userId': 'admin-1', 'email': 'admin@example.com'});
+        when(
+          () => mockAuthRepository.login('admin@example.com', 'password123'),
+        ).thenAnswer(
+          (_) async => {'userId': 'admin-1', 'email': 'admin@example.com'},
+        );
 
         final expectedStates = [
           AuthLoading(),
-          const AuthAuthenticated(userId: 'admin-1', email: 'admin@example.com'),
+          const AuthAuthenticated(
+            userId: 'admin-1',
+            email: 'admin@example.com',
+          ),
         ];
 
         expectLater(authCubit.stream, emitsInOrder(expectedStates));
@@ -86,61 +109,92 @@ void main() {
         await authCubit.login('admin@example.com', 'password123');
       });
 
-      test('emits [AuthLoading, AuthError, AuthUnauthenticated] on failure', () async {
-        when(() => mockAuthRepository.login(any(), any()))
-            .thenThrow(Exception('Invalid credentials'));
+      test(
+        'emits [AuthLoading, AuthError, AuthUnauthenticated] on failure',
+        () async {
+          when(
+            () => mockAuthRepository.login(any(), any()),
+          ).thenThrow(Exception('Invalid credentials'));
 
-        final expectedStates = [
-          AuthLoading(),
-          const AuthError('Exception: Invalid credentials'),
-          AuthUnauthenticated(),
-        ];
+          final expectedStates = [
+            AuthLoading(),
+            const AuthError('Exception: Invalid credentials'),
+            AuthUnauthenticated(),
+          ];
 
-        expectLater(authCubit.stream, emitsInOrder(expectedStates));
+          expectLater(authCubit.stream, emitsInOrder(expectedStates));
 
-        await authCubit.login('wrong@example.com', 'wrongpass');
-      });
+          await authCubit.login('wrong@example.com', 'wrongpass');
+        },
+      );
     });
 
     group('register', () {
-      test('emits [AuthLoading, AuthAuthenticated] on registration and auto-login success', () async {
-        when(() => mockAuthRepository.register('new@example.com', 'secret123'))
-            .thenAnswer((_) async {});
-        when(() => mockAuthRepository.login('new@example.com', 'secret123'))
-            .thenAnswer((_) async => {'userId': 'user-new', 'email': 'new@example.com'});
+      test(
+        'emits [AuthLoading, AuthAuthenticated] on registration and auto-login success',
+        () async {
+          when(
+            () => mockAuthRepository.register('new@example.com', 'secret123'),
+          ).thenAnswer((_) async {});
+          when(
+            () => mockAuthRepository.login('new@example.com', 'secret123'),
+          ).thenAnswer(
+            (_) async => {'userId': 'user-new', 'email': 'new@example.com'},
+          );
 
-        final expectedStates = [
-          AuthLoading(),
-          const AuthAuthenticated(userId: 'user-new', email: 'new@example.com'),
-        ];
+          final expectedStates = [
+            AuthLoading(),
+            const AuthAuthenticated(
+              userId: 'user-new',
+              email: 'new@example.com',
+            ),
+          ];
 
-        expectLater(authCubit.stream, emitsInOrder(expectedStates));
+          expectLater(authCubit.stream, emitsInOrder(expectedStates));
 
-        await authCubit.register('new@example.com', 'secret123');
-      });
+          await authCubit.register('new@example.com', 'secret123');
+        },
+      );
 
-      test('emits [AuthLoading, AuthError, AuthUnauthenticated] on registration failure', () async {
-        when(() => mockAuthRepository.register(any(), any()))
-            .thenThrow(Exception('Email already in use'));
+      test(
+        'emits [AuthLoading, AuthError, AuthUnauthenticated] on registration failure',
+        () async {
+          when(
+            () => mockAuthRepository.register(any(), any()),
+          ).thenThrow(Exception('Email already in use'));
 
-        final expectedStates = [
-          AuthLoading(),
-          const AuthError('Exception: Email already in use'),
-          AuthUnauthenticated(),
-        ];
+          final expectedStates = [
+            AuthLoading(),
+            const AuthError('Exception: Email already in use'),
+            AuthUnauthenticated(),
+          ];
 
-        expectLater(authCubit.stream, emitsInOrder(expectedStates));
+          expectLater(authCubit.stream, emitsInOrder(expectedStates));
 
-        await authCubit.register('existing@example.com', 'pass123');
-      });
+          await authCubit.register('existing@example.com', 'pass123');
+        },
+      );
     });
 
     group('logout', () {
       test('emits [AuthLoading, AuthUnauthenticated]', () async {
         when(() => mockAuthRepository.logout()).thenAnswer((_) async {});
 
+        final expectedStates = [AuthLoading(), AuthUnauthenticated()];
+
+        expectLater(authCubit.stream, emitsInOrder(expectedStates));
+
+        await authCubit.logout();
+      });
+
+      test('emits an error and signs out locally when logout fails', () async {
+        when(
+          () => mockAuthRepository.logout(),
+        ).thenThrow(Exception('Secure storage error'));
+
         final expectedStates = [
           AuthLoading(),
+          const AuthError('Exception: Secure storage error'),
           AuthUnauthenticated(),
         ];
 
@@ -151,4 +205,3 @@ void main() {
     });
   });
 }
-

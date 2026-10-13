@@ -21,6 +21,14 @@ class CustomerDetailsScreen extends StatelessWidget {
     return StreamBuilder<Customer?>(
       stream: customerRepo.watchCustomerById(customerId),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Customer Load Error')),
+            body: Center(
+              child: Text('Could not load customer: ${snapshot.error}'),
+            ),
+          );
+        }
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
@@ -59,9 +67,13 @@ class CustomerDetailsScreen extends StatelessWidget {
                 onPressed: () => context.push('/customers/${customer.id}/edit'),
               ),
               IconButton(
-                icon: const Icon(Icons.delete_outline, color: AppColors.syncError),
+                icon: const Icon(
+                  Icons.delete_outline,
+                  color: AppColors.syncError,
+                ),
                 tooltip: 'Delete Customer',
-                onPressed: () => _confirmDelete(context, customer, customerRepo),
+                onPressed: () =>
+                    _confirmDelete(context, customer, customerRepo),
               ),
             ],
           ),
@@ -82,10 +94,16 @@ class CustomerDetailsScreen extends StatelessWidget {
                             width: 48,
                             height: 48,
                             decoration: BoxDecoration(
-                              color: AppColors.primaryLight.withValues(alpha: 0.15),
+                              color: AppColors.primaryLight.withValues(
+                                alpha: 0.15,
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.business_outlined, color: AppColors.primary, size: 26),
+                            child: const Icon(
+                              Icons.business_outlined,
+                              color: AppColors.primary,
+                              size: 26,
+                            ),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -103,14 +121,18 @@ class CustomerDetailsScreen extends StatelessWidget {
                                 const SizedBox(height: 2),
                                 Text(
                                   'Created ${_formatDate(customer.createdAt)}',
-                                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                         ],
                       ),
-                      if (customer.contactInformation != null && customer.contactInformation!.trim().isNotEmpty) ...[
+                      if (customer.contactInformation != null &&
+                          customer.contactInformation!.trim().isNotEmpty) ...[
                         const SizedBox(height: 16),
                         const Divider(),
                         const SizedBox(height: 12),
@@ -152,7 +174,8 @@ class CustomerDetailsScreen extends StatelessWidget {
                       ),
                     ),
                     TextButton.icon(
-                      onPressed: () => context.push('/sites/new?customerId=${customer.id}'),
+                      onPressed: () =>
+                          context.push('/sites/new?customerId=${customer.id}'),
                       icon: const Icon(Icons.add, size: 18),
                       label: const Text('Add Site'),
                     ),
@@ -164,8 +187,14 @@ class CustomerDetailsScreen extends StatelessWidget {
                 StreamBuilder<List<Site>>(
                   stream: sitesDao.watchSitesByCustomer(customer.id),
                   builder: (context, siteSnapshot) {
-                    if (siteSnapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator()));
+                    if (siteSnapshot.connectionState ==
+                        ConnectionState.waiting) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
                     }
 
                     final sites = siteSnapshot.data ?? [];
@@ -174,21 +203,33 @@ class CustomerDetailsScreen extends StatelessWidget {
                         padding: const EdgeInsets.all(24),
                         child: Column(
                           children: [
-                            const Icon(Icons.location_city_outlined, size: 36, color: AppColors.textMuted),
+                            const Icon(
+                              Icons.location_city_outlined,
+                              size: 36,
+                              color: AppColors.textMuted,
+                            ),
                             const SizedBox(height: 10),
                             const Text(
                               'No Sites Registered',
-                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
                             ),
                             const SizedBox(height: 4),
                             const Text(
                               'Add job sites or inspection facilities for this customer.',
-                              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                              style: TextStyle(
+                                color: AppColors.textSecondary,
+                                fontSize: 13,
+                              ),
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 14),
                             ElevatedButton(
-                              onPressed: () => context.push('/sites/new?customerId=${customer.id}'),
+                              onPressed: () => context.push(
+                                '/sites/new?customerId=${customer.id}',
+                              ),
                               child: const Text('Add First Site'),
                             ),
                           ],
@@ -209,15 +250,22 @@ class CustomerDetailsScreen extends StatelessWidget {
                                   width: 40,
                                   height: 40,
                                   decoration: BoxDecoration(
-                                    color: AppColors.secondary.withValues(alpha: 0.12),
+                                    color: AppColors.secondary.withValues(
+                                      alpha: 0.12,
+                                    ),
                                     borderRadius: BorderRadius.circular(8),
                                   ),
-                                  child: const Icon(Icons.location_on_outlined, color: AppColors.secondary, size: 20),
+                                  child: const Icon(
+                                    Icons.location_on_outlined,
+                                    color: AppColors.secondary,
+                                    size: 20,
+                                  ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         site.siteName,
@@ -227,11 +275,15 @@ class CustomerDetailsScreen extends StatelessWidget {
                                           color: AppColors.textPrimary,
                                         ),
                                       ),
-                                      if (site.address != null && site.address!.isNotEmpty) ...[
+                                      if (site.address != null &&
+                                          site.address!.isNotEmpty) ...[
                                         const SizedBox(height: 3),
                                         Text(
                                           site.address!,
-                                          style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            color: AppColors.textSecondary,
+                                          ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -239,7 +291,11 @@ class CustomerDetailsScreen extends StatelessWidget {
                                     ],
                                   ),
                                 ),
-                                const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20),
+                                const Icon(
+                                  Icons.chevron_right,
+                                  color: AppColors.textMuted,
+                                  size: 20,
+                                ),
                               ],
                             ),
                           ),
@@ -256,7 +312,11 @@ class CustomerDetailsScreen extends StatelessWidget {
     );
   }
 
-  void _confirmDelete(BuildContext context, Customer customer, CustomerRepository repo) {
+  void _confirmDelete(
+    BuildContext context,
+    Customer customer,
+    CustomerRepository repo,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -273,15 +333,25 @@ class CustomerDetailsScreen extends StatelessWidget {
             style: TextButton.styleFrom(foregroundColor: AppColors.syncError),
             onPressed: () async {
               Navigator.of(ctx).pop();
-              await repo.deleteCustomer(customer);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Customer "${customer.name}" deleted.'),
-                    backgroundColor: AppColors.syncError,
-                  ),
-                );
-                context.pop();
+              try {
+                await repo.deleteCustomer(customer);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Customer "${customer.name}" deleted.'),
+                      backgroundColor: AppColors.syncError,
+                    ),
+                  );
+                  context.pop();
+                }
+              } catch (error) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Could not delete customer: $error'),
+                    ),
+                  );
+                }
               }
             },
             child: const Text('Delete'),
@@ -295,4 +365,3 @@ class CustomerDetailsScreen extends StatelessWidget {
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 }
-

@@ -40,26 +40,28 @@ Future<void> init() async {
   sl.registerLazySingleton(() => PhotoService());
 
   // Network & Sync
-  sl.registerLazySingleton(() => ApiClient(
-        secureStorage: sl(),
-        preferencesService: sl(),
-      ));
+  sl.registerLazySingleton(
+    () => ApiClient(secureStorage: sl(), preferencesService: sl()),
+  );
 
-  sl.registerLazySingleton(() => SyncEngine(
-        db: sl(),
-        dio: sl<ApiClient>().dio,
-        secureStorage: sl(),
-        preferencesService: sl(),
-        outboxDao: sl(),
-      ));
+  sl.registerLazySingleton(
+    () => SyncEngine(
+      db: sl(),
+      dio: sl<ApiClient>().dio,
+      secureStorage: sl(),
+      preferencesService: sl(),
+      outboxDao: sl(),
+    ),
+  );
 
   // Repositories
-  sl.registerLazySingleton(() => AuthRepository(
-        apiClient: sl(),
-        secureStorage: sl(),
-        preferencesService: sl(),
-        db: sl(),
-      ));
+  sl.registerLazySingleton(
+    () => AuthRepository(
+      apiClient: sl(),
+      secureStorage: sl(),
+      preferencesService: sl(),
+    ),
+  );
   sl.registerLazySingleton(() => CustomerRepository(customerDao: sl()));
   sl.registerLazySingleton(() => SiteRepository(sitesDao: sl()));
   sl.registerLazySingleton(() => FieldNoteRepository(fieldNotesDao: sl()));

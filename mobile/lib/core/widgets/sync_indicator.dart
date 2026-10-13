@@ -21,9 +21,12 @@ class SyncIndicator extends StatelessWidget {
 
         return StreamBuilder<int>(
           stream: outboxDao.watchPendingCount(),
-          initialData: 0,
           builder: (context, pendingSnap) {
-            final pendingCount = pendingSnap.data ?? 0;
+            return StreamBuilder<int>(
+              stream: outboxDao.watchFailedCount(),
+              builder: (context, failedSnap) {
+            final pendingCount = pendingSnap.data;
+            final failedCount = failedSnap.data;
 
             Color bgColor;
             Color fgColor;
@@ -42,11 +45,22 @@ class SyncIndicator extends StatelessWidget {
                   valueColor: AlwaysStoppedAnimation<Color>(fgColor),
                 ),
               );
-            } else if (pendingCount > 0) {
+            } else if (failedCount != null && failedCount > 0) {
+              bgColor = AppColors.syncError.withValues(alpha: 0.12);
+              fgColor = AppColors.syncError;
+              label = '$failedCount failed';
+              icon = Icon(Icons.error_outline, size: 14, color: fgColor);
+            } else if (pendingCount != null && pendingCount > 0) {
               bgColor = AppColors.syncPending.withValues(alpha: 0.15);
               fgColor = const Color(0xFFB45309); // Dark amber
               label = '$pendingCount pending';
               icon = Icon(Icons.cloud_upload_outlined, size: 14, color: fgColor);
+            } else if (pendingSnap.hasError || failedSnap.hasError ||
+                pendingCount == null || failedCount == null) {
+              bgColor = AppColors.surfaceSubtle;
+              fgColor = AppColors.textSecondary;
+              label = 'Sync status unavailable';
+              icon = Icon(Icons.sync_problem_outlined, size: 14, color: fgColor);
             } else {
               bgColor = AppColors.syncSuccess.withValues(alpha: 0.12);
               fgColor = AppColors.syncSuccess;
@@ -84,10 +98,11 @@ class SyncIndicator extends StatelessWidget {
                 ),
               ),
             );
+              },
+            );
           },
         );
       },
     );
   }
 }
-

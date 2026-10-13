@@ -6,9 +6,11 @@ import com.fieldnotes.backend.entity.*;
 import com.fieldnotes.backend.repository.*;
 import com.fieldnotes.backend.service.AuthenticatedUserService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
@@ -42,7 +44,17 @@ public class SyncController {
         }
         if (request.getSites() != null) {
             for (Site s : request.getSites()) {
+                if (s.getCustomer() == null || s.getCustomer().getId() == null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Site customer is required.");
+                }
+                Customer customer = customerRepository
+                    .findByIdAndUserId(s.getCustomer().getId(), user.getId())
+                    .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Site customer does not exist for the authenticated user."
+                    ));
                 s.setUser(user);
+                s.setCustomer(customer);
                 s.setUpdatedAt(now);
                 if (s.getCreatedAt() == null) s.setCreatedAt(now);
                 siteRepository.save(s);
@@ -51,7 +63,17 @@ public class SyncController {
         }
         if (request.getFieldNotes() != null) {
             for (FieldNote fn : request.getFieldNotes()) {
+                if (fn.getSite() == null || fn.getSite().getId() == null) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Field note site is required.");
+                }
+                Site site = siteRepository
+                    .findByIdAndUserId(fn.getSite().getId(), user.getId())
+                    .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "Field note site does not exist for the authenticated user."
+                    ));
                 fn.setUser(user);
+                fn.setSite(site);
                 fn.setUpdatedAt(now);
                 if (fn.getCreatedAt() == null) fn.setCreatedAt(now);
                 fieldNoteRepository.save(fn);

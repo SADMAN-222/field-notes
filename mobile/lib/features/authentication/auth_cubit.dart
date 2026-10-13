@@ -32,7 +32,8 @@ class AuthCubit extends Cubit<AuthState> {
       } else {
         emit(AuthUnauthenticated());
       }
-    } catch (_) {
+    } catch (error) {
+      emit(AuthError(error.toString()));
       emit(AuthUnauthenticated());
     }
   }
@@ -41,10 +42,12 @@ class AuthCubit extends Cubit<AuthState> {
     emit(AuthLoading());
     try {
       final user = await authRepository.login(email, password);
-      emit(AuthAuthenticated(
-        userId: user['userId'] ?? '',
-        email: user['email'] ?? email,
-      ));
+      emit(
+        AuthAuthenticated(
+          userId: user['userId'] ?? '',
+          email: user['email'] ?? email,
+        ),
+      );
     } catch (e) {
       emit(AuthError(e.toString()));
       emit(AuthUnauthenticated());
@@ -56,10 +59,12 @@ class AuthCubit extends Cubit<AuthState> {
     try {
       await authRepository.register(email, password);
       final user = await authRepository.login(email, password);
-      emit(AuthAuthenticated(
-        userId: user['userId'] ?? '',
-        email: user['email'] ?? email,
-      ));
+      emit(
+        AuthAuthenticated(
+          userId: user['userId'] ?? '',
+          email: user['email'] ?? email,
+        ),
+      );
     } catch (e) {
       emit(AuthError(e.toString()));
       emit(AuthUnauthenticated());
@@ -68,7 +73,12 @@ class AuthCubit extends Cubit<AuthState> {
 
   Future<void> logout() async {
     emit(AuthLoading());
-    await authRepository.logout();
-    emit(AuthUnauthenticated());
+    try {
+      await authRepository.logout();
+      emit(AuthUnauthenticated());
+    } catch (error) {
+      emit(AuthError(error.toString()));
+      emit(AuthUnauthenticated());
+    }
   }
 }

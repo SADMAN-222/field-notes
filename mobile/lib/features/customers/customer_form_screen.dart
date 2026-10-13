@@ -25,6 +25,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
 
   bool _isLoading = false;
   bool _isSaving = false;
+  String? _loadError;
   Customer? _existingCustomer;
 
   bool get isEditing => widget.customerId != null;
@@ -38,16 +39,25 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
   }
 
   Future<void> _loadCustomer() async {
-    setState(() => _isLoading = true);
-    final repo = di.sl<CustomerRepository>();
-    final customer = await repo.getCustomerById(widget.customerId!);
-    if (mounted) {
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+    try {
+      final repo = di.sl<CustomerRepository>();
+      final customer = await repo.getCustomerById(widget.customerId!);
+      if (!mounted) return;
       if (customer != null) {
         _existingCustomer = customer;
         _nameController.text = customer.name;
         _contactController.text = customer.contactInformation ?? '';
+      } else {
+        _loadError = 'Customer was not found.';
       }
-      setState(() => _isLoading = false);
+    } catch (error) {
+      _loadError = 'Could not load customer: $error';
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -87,7 +97,9 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
           id: const Uuid().v4(),
           userId: userId,
           name: _nameController.text.trim(),
-          contactInformation: _contactController.text.trim().isEmpty ? null : _contactController.text.trim(),
+          contactInformation: _contactController.text.trim().isEmpty
+              ? null
+              : _contactController.text.trim(),
           createdAt: DateTime.now().toUtc(),
           updatedAt: DateTime.now().toUtc(),
           version: 0,
@@ -120,84 +132,125 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(isEditing ? 'Edit Customer' : 'New Customer'),
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Form(
-                key: _formKey,
+    final bodyContent = _isLoading
+        ? const Center(child: CircularProgressIndicator())
+        : _loadError != null
+            ? Center(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.border),
-                        boxShadow: AppColors.cardShadow,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Customer Information',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _nameController,
-                            textCapitalization: TextCapitalization.words,
-                            decoration: const InputDecoration(
-                              labelText: 'Company / Customer Name *',
-                              hintText: 'e.g. Apex Industrial Solutions',
-                              prefixIcon: Icon(Icons.business_outlined, size: 20),
-                            ),
-                            validator: (val) {
-                              if (val == null || val.trim().isEmpty) {
-                                return 'Please enter customer name';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 16),
-                          TextFormField(
-                            controller: _contactController,
-                            maxLines: 3,
-                            decoration: const InputDecoration(
-                              labelText: 'Contact Information',
-                              hintText: 'Email, phone, primary point of contact...',
-                              prefixIcon: Icon(Icons.contact_mail_outlined, size: 20),
-                              alignLabelWithHint: true,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: _isSaving ? null : _saveCustomer,
-                      child: _isSaving
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : Text(isEditing ? 'Save Changes' : 'Create Customer'),
+                    Text(_loadError!, textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    TextButton(
+                      onPressed: _loadCustomer,
+                      child: const Text('Retry'),
                     ),
                   ],
+                ),
+              )
+            : SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 92),
+                keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.border),
+                          boxShadow: AppColors.cardShadow,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Customer Information',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _nameController,
+                              textCapitalization: TextCapitalization.words,
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                labelText: 'Company / Customer Name *',
+                                hintText: 'e.g. Apex Industrial Solutions',
+                                prefixIcon: Icon(
+                                  Icons.business_outlined,
+                                  size: 20,
+                                ),
+                              ),
+                              validator: (val) {
+                                if (val == null || val.trim().isEmpty) {
+                                  return 'Please enter customer name';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            TextFormField(
+                              controller: _contactController,
+                              maxLines: 3,
+                              textInputAction: TextInputAction.done,
+                              decoration: const InputDecoration(
+                                labelText: 'Contact Information',
+                                hintText:
+                                    'Email, phone, primary point of contact...',
+                                prefixIcon: Icon(
+                                  Icons.contact_mail_outlined,
+                                  size: 20,
+                                ),
+                                alignLabelWithHint: true,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(title: Text(isEditing ? 'Edit Customer' : 'New Customer')),
+      body: bodyContent,
+      bottomNavigationBar: _isLoading || _loadError != null
+          ? null
+          : SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: _isSaving ? null : _saveCustomer,
+                  child: _isSaving
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          ),
+                        )
+                      : Text(
+                          isEditing ? 'Save Changes' : 'Create Customer',
+                        ),
                 ),
               ),
             ),

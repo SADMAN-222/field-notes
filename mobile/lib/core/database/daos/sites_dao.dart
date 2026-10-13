@@ -70,6 +70,14 @@ class SitesDao extends DatabaseAccessor<AppDatabase> with _$SitesDaoMixin {
     return await query.map((row) => row.read(countExp)).getSingle() ?? 0;
   }
 
+  Stream<int> watchSiteCount(String userId) {
+    final countExp = sites.id.count();
+    final query = selectOnly(sites)
+      ..where(sites.userId.equals(userId) & sites.deletedAt.isNull())
+      ..addColumns([countExp]);
+    return query.map((row) => row.read(countExp) ?? 0).watchSingle();
+  }
+
   Future<void> createSite(Site site) {
     return transaction(() async {
       await into(sites).insert(site);

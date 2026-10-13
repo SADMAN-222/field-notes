@@ -13,34 +13,53 @@ class PreferencesService {
   static const _keyLastSync = 'pref_last_sync';
   static const _keyUserEmail = 'pref_user_email';
 
+  static const _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+
   static String get defaultBaseUrl {
-    if (kIsWeb) return 'http://localhost:8081';
-    if (Platform.isAndroid) return 'http://10.0.2.2:8081';
-    return 'http://localhost:8081';
+    if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
+    if (kIsWeb) return 'http://localhost:8080';
+    if (Platform.isAndroid) return 'http://10.0.2.2:8080';
+    return 'http://localhost:8080';
   }
 
-  String get baseUrl => _prefs.getString(_keyBaseUrl) ?? defaultBaseUrl;
-  Future<void> setBaseUrl(String url) async => await _prefs.setString(_keyBaseUrl, url);
+  String get baseUrl {
+    final savedUrl = _prefs.getString(_keyBaseUrl);
+    if (savedUrl == null ||
+        savedUrl == 'http://localhost:8081' ||
+        savedUrl == 'http://10.0.2.2:8081') {
+      return defaultBaseUrl;
+    }
+    return savedUrl;
+  }
+  Future<void> setBaseUrl(String url) async =>
+      await _prefs.setString(_keyBaseUrl, url);
 
   bool get autoSync => _prefs.getBool(_keyAutoSync) ?? true;
-  Future<void> setAutoSync(bool enabled) async => await _prefs.setBool(_keyAutoSync, enabled);
+  Future<void> setAutoSync(bool enabled) async =>
+      await _prefs.setBool(_keyAutoSync, enabled);
 
   int get syncIntervalSeconds => _prefs.getInt(_keySyncInterval) ?? 30;
-  Future<void> setSyncInterval(int seconds) async => await _prefs.setInt(_keySyncInterval, seconds);
+  Future<void> setSyncInterval(int seconds) async =>
+      await _prefs.setInt(_keySyncInterval, seconds);
 
   DateTime? get lastSyncTime {
     final str = _prefs.getString(_keyLastSync);
     return str != null ? DateTime.tryParse(str) : null;
   }
-  Future<void> setLastSyncTime(DateTime time) async => await _prefs.setString(_keyLastSync, time.toIso8601String());
+
+  Future<void> setLastSyncTime(DateTime time) async =>
+      await _prefs.setString(_keyLastSync, time.toIso8601String());
 
   String? get userEmail => _prefs.getString(_keyUserEmail);
-  Future<void> setUserEmail(String email) async => await _prefs.setString(_keyUserEmail, email);
+  Future<void> setUserEmail(String email) async =>
+      await _prefs.setString(_keyUserEmail, email);
 
   static const _keyDefaultNoteStatus = 'pref_default_note_status';
 
-  String get defaultNoteStatus => _prefs.getString(_keyDefaultNoteStatus) ?? 'DRAFT';
-  Future<void> setDefaultNoteStatus(String status) async => await _prefs.setString(_keyDefaultNoteStatus, status);
+  String get defaultNoteStatus =>
+      _prefs.getString(_keyDefaultNoteStatus) ?? 'DRAFT';
+  Future<void> setDefaultNoteStatus(String status) async =>
+      await _prefs.setString(_keyDefaultNoteStatus, status);
 
   Future<void> clearUserPreferences() async {
     await _prefs.remove(_keyLastSync);
