@@ -87,8 +87,7 @@ deployment is configured. The server also needs valid database/JWT settings
 and a backend-only Storage service key for photo synchronization.
 
 See [TEST_REPORT.md](./TEST_REPORT.md) for detailed test commands, evidence,
-and limitations. See [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for
-remaining delivery work.
+and limitations.
 
 ## How it works
 
@@ -187,7 +186,6 @@ are in [`backend/src/main/resources/db/migration/`](backend/src/main/resources/d
 | [`mobile/`](mobile/) | Flutter Android application, Drift database, repositories, and sync engine |
 | [`backend/`](backend/) | Spring Boot API, authentication, database access, and private media integration |
 | [`TEST_REPORT.md`](TEST_REPORT.md) | Executed checks, verification evidence, and blockers |
-| [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Remaining work and acceptance criteria |
 
 ## Security
 
