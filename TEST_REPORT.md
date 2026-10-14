@@ -16,6 +16,7 @@ its source code exists or a unit test passes.
 | Backend package | 🟢 COMPLETE & VERIFIED | `backend\\mvnw.cmd package`: `BUILD SUCCESS`. |
 | Android debug APK build | 🟢 COMPLETE & VERIFIED | `flutter build apk --debug` completed before the clean rebuild. The subsequent `flutter clean` removed that debug artifact. |
 | Android release APK build | 🟡 BUILT; DEVELOPMENT SIGNING ONLY | `flutter build apk --release` succeeded and produced a 59.7 MB APK. The Android release variant is configured to use the debug signing key and the application ID is `com.example.field_notes_test`; this is not a production-distributable release. |
+| Public APK handoff | 🟡 PREVIEW RELEASE AVAILABLE | APK is attached to the public prerelease at `https://github.com/SADMAN-222/field-notes/releases/tag/android-preview-2026-10-14`. The shared Google Drive folder was accessible only in signed-out view and requires an authenticated session to upload; it does not currently contain the APK. |
 | Local-first customer/site/note CRUD | 🟡 IMPLEMENTED BUT NOT FULLY VERIFIED | Repository tests cover in-memory create/update/delete, persistence and outbox enqueue; no emulator or restart/offline device run was possible. |
 | Dashboard local counts | 🟡 IMPLEMENTED BUT NOT FULLY VERIFIED | Account-scoped count-stream regression test passes in the 35-test Flutter suite; live UI checks are blocked by missing emulator. |
 | Note status specification | 🟡 IMPLEMENTED BUT NOT FULLY VERIFIED | UI/default/sync statuses changed to `PENDING`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`; Drift migration maps legacy `DRAFT` to `PENDING` and `SUBMITTED` to `IN_PROGRESS`. Analyzer and full mobile test suite pass; device upgrade-path test is unavailable. |
@@ -42,6 +43,7 @@ its source code exists or a unit test passes.
 | `backend\\mvnw.cmd package` (from `backend`) | PASS — `BUILD SUCCESS`. |
 | `flutter build apk --debug` (from `mobile`, before the later clean rebuild) | PASS — APK generated; `flutter clean` subsequently removed it. |
 | `flutter build apk --release` (from `mobile`) | PASS — 59.7 MB APK generated. Kotlin incremental compilation is disabled to avoid cross-volume cache failures, and Gradle heap is capped at 3 GB for this 8 GB host. The output is debug-signed and is not suitable as a production release. |
+| GitHub prerelease upload | PASS — public preview asset attached to `android-preview-2026-10-14`; README links to the asset and release. |
 | `adb devices -l` | BLOCKED — no Android device/emulator listed; manual UI verification could not be performed. |
 | Live Supabase/PostgreSQL queries | BLOCKED — no datasource/JWT environment configuration was available. No secrets were read or printed. |
 

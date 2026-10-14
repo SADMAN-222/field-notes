@@ -4,7 +4,7 @@
 and field notes on the device, then synchronize queued changes through the
 Field Notes API to Supabase when the service is configured and reachable.
 
-> **Download:** [Android preview APK](https://github.com/SADMAN-222/field-notes/releases/download/android-preview-2026-10-14/Field-Notes-Android-Preview.apk) · [All GitHub releases](https://github.com/SADMAN-222/field-notes/releases) · [Shared Google Drive folder](https://drive.google.com/drive/folders/1vOJJR4gB4LtAQN7TH6ZSic-Zf2YfOIe_)
+> **Download:** [Android preview APK](https://github.com/SADMAN-222/field-notes/releases/download/android-preview-2026-10-14/Field-Notes-Android-Preview.apk) · [All GitHub releases](https://github.com/SADMAN-222/field-notes/releases) · [Google Drive folder](https://drive.google.com/drive/folders/1vOJJR4gB4LtAQN7TH6ZSic-Zf2YfOIe_)
 >
 > **Preview build, not a production release.** The APK is debug-signed, uses the
 > development application ID `com.example.field_notes_test`, and was built
@@ -46,9 +46,9 @@ Flutter screens → BLoC/Cubit and repositories → Drift/SQLite + sync outbox
 
 The preview package is signed with the Android debug key. Android treats it as
 a different application from any future production-signed package; uninstalling
-the preview may remove its local app data. The shared Drive folder is provided
-as an additional handoff location, but GitHub Releases is the direct download
-source for the current APK.
+the preview may remove its local app data. The current APK is attached to the
+GitHub prerelease above. The linked Drive folder does not currently contain the
+APK; adding files there requires an authenticated Google Drive session.
 
 ## Current verification and limitations
 
