@@ -1,70 +1,134 @@
 # Field Notes
 
-Field Notes is an offline-first field-service application. The current architecture
-is:
+**Offline-first field-service notes for Android.** Record customers, job sites,
+and field notes on the device, then synchronize queued changes through the
+Field Notes API to Supabase when the service is configured and reachable.
+
+> **Download:** [Android preview APK](https://github.com/SADMAN-222/field-notes/releases/download/android-preview-2026-10-14/Field-Notes-Android-Preview.apk) · [All GitHub releases](https://github.com/SADMAN-222/field-notes/releases) · [Shared Google Drive folder](https://drive.google.com/drive/folders/1vOJJR4gB4LtAQN7TH6ZSic-Zf2YfOIe_)
+>
+> **Preview build, not a production release.** The APK is debug-signed, uses the
+> development application ID `com.example.field_notes_test`, and was built
+> without this deployment's Supabase URL or anon key. It can be installed for
+> an initial app review, but sign-in and server synchronization require a
+> correctly configured deployment. Do not distribute it as the production app.
+
+## What the application does
+
+- Maintains Customers, Sites, and Field Notes in a local SQLite database.
+- Queues local changes for synchronization rather than requiring a network
+  request for every edit.
+- Shows dashboard totals from local data and tracks sync state separately.
+- Scopes local records and queued operations to the signed-in account.
+- Preserves version conflicts for explicit resolution instead of silently
+  overwriting the server copy.
+- Supports field-note photos through authenticated backend endpoints and a
+  private Supabase Storage bucket when storage is configured.
+
+The Android app is built with Flutter, BLoC/Cubit, and Drift/SQLite. The API is
+Spring Boot, with Supabase Auth JWT validation, PostgreSQL, and Flyway-managed
+database migrations:
 
 ```text
-Flutter UI
-  → BLoC/Cubit and feature repositories
-  → Drift/SQLite local data and durable sync outbox
-  → Spring Boot REST API
-  → Supabase Auth JWT validation and PostgreSQL
+Flutter screens → BLoC/Cubit and repositories → Drift/SQLite + sync outbox
+  → Spring Boot REST API → Supabase Auth → PostgreSQL and private Storage
 ```
 
-SQLite is the mobile app's local source of truth. Mutations should be persisted
-locally with their outbox operation before synchronization. Dashboard counts read
-the local database; sync health is separate.
+## Download and install
 
-## Project layout
+1. Download the [Android preview APK](https://github.com/SADMAN-222/field-notes/releases/download/android-preview-2026-10-14/Field-Notes-Android-Preview.apk).
+2. On the Android device, open the downloaded APK and approve installation
+   from that source if Android asks.
+3. For installation over USB with Android platform tools:
 
-- `mobile/` — Flutter application, Drift database, offline repositories, sync engine.
-- `backend/` — Spring Boot REST API, Flyway SQL migration and PostgreSQL configuration.
-- `TEST_REPORT.md` — executed verification and known blockers.
-- `IMPLEMENTATION_PLAN.md` — delivery priorities and acceptance criteria.
+   ```powershell
+   adb install -r .\Field-Notes-Android-Preview.apk
+   ```
 
-## Local development
+The preview package is signed with the Android debug key. Android treats it as
+a different application from any future production-signed package; uninstalling
+the preview may remove its local app data. The shared Drive folder is provided
+as an additional handoff location, but GitHub Releases is the direct download
+source for the current APK.
 
-### Mobile
+## Current verification and limitations
 
-Install Flutter, then:
+| Area | Verified here |
+|---|---|
+| Flutter static analysis | Passed with no issues |
+| Flutter tests | 36 passed |
+| Backend tests | 6 passed against H2 |
+| Backend package | Built successfully |
+| Android APKs | Debug and release variants built; the release variant is debug-signed |
+| Live Android workflow | Not verified; no emulator/device was connected |
+| Supabase Auth, PostgreSQL, Storage | Not live-verified; deployment credentials were unavailable |
+
+Automated test success is not evidence of a live Supabase deployment. In
+particular, configure the mobile Supabase URL and anon/publishable key at build
+time, deploy the backend with its database/JWT settings, and configure the
+backend-only Storage service key before expecting authenticated sign-in or
+online sync. See [TEST_REPORT.md](./TEST_REPORT.md) for commands, test scope,
+and remaining release limitations.
+
+## Run from source
+
+### Requirements
+
+- Flutter SDK and Dart SDK compatible with `mobile/pubspec.yaml`
+- JDK 17 for the Spring Boot backend
+- Android Studio/Android SDK for Android builds
+- A configured Supabase project for real authentication and remote sync
+
+### Flutter app
 
 ```powershell
 cd mobile
 flutter pub get
 flutter analyze
 flutter test
-flutter run
-```
-
-On an Android emulator, the default API host is `http://10.0.2.2:8080`. Configure
-Supabase for the app with Flutter compile-time defines; never commit credentials:
-
-```powershell
-flutter run --dart-define=SUPABASE_URL=https://<project-ref>.supabase.co `
+flutter run `
+  --dart-define=SUPABASE_URL=https://<project-ref>.supabase.co `
   --dart-define=SUPABASE_ANON_KEY=<publishable-or-anon-key> `
   --dart-define=API_BASE_URL=http://10.0.2.2:8080
 ```
 
-The source has placeholder Supabase values for builds that omit the defines; those
-placeholders are not usable for authentication.
+`10.0.2.2` is the Android emulator's route to the development host. Use the
+reachable HTTPS API URL for a physical device or deployed backend. Never put a
+service-role key in Flutter or pass one through a mobile build define.
 
-### Backend
+Build a locally installable APK:
 
-The backend production profile is configured for PostgreSQL and Flyway. Provide
-environment variables in the process environment (never commit credentials):
+```powershell
+flutter build apk --release `
+  --dart-define=SUPABASE_URL=https://<project-ref>.supabase.co `
+  --dart-define=SUPABASE_ANON_KEY=<publishable-or-anon-key> `
+  --dart-define=API_BASE_URL=<reachable-api-base-url>
+```
 
-- `SPRING_PROFILES_ACTIVE` (use `local` for the local H2 development profile).
+The checked-in Android release build configuration currently uses debug
+signing and a sample application ID. Before producing an office/production
+distribution, configure an organization-owned application ID and a protected
+release signing key; keep signing files and passwords out of Git.
+
+### Spring Boot API
+
+The backend has a local H2 profile for development and a PostgreSQL/Flyway
+configuration for deployment. Configure environment variables in the backend
+process; example files contain placeholders only.
+
+Relevant settings:
+
+- `SPRING_PROFILES_ACTIVE` — `local` for development; configure the deployment
+  profile for PostgreSQL.
 - `SPRING_DATASOURCE_URL`, `SPRING_DATASOURCE_USERNAME`,
-  `SPRING_DATASOURCE_PASSWORD`, or the individual `SUPABASE_DB_*` settings.
-- `SUPABASE_JWK_SET_URI` for Supabase JWT signing-key verification, or
-  `SUPABASE_JWT_SECRET` where the project still issues HS256 tokens.
+  `SPRING_DATASOURCE_PASSWORD`, or the `SUPABASE_DB_*` connection settings.
+- `SUPABASE_JWK_SET_URI` or `SUPABASE_JWT_SECRET` for JWT verification,
+  according to the Supabase project's token signing setup.
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and optionally
-  `SUPABASE_STORAGE_BUCKET` for private photo storage. The service-role key is
-  backend-only and must never be passed to Flutter. The backend creates the
-  configured bucket as private if it does not exist and refuses an existing
-  public bucket.
+  `SUPABASE_STORAGE_BUCKET` for backend-only private photo storage.
 
-Run the backend:
+The service-role key has broad privileges. Store it only in the backend's
+secret manager/environment, restrict access, and rotate it if exposed. The
+backend expects the photo bucket to be private.
 
 ```powershell
 cd backend
@@ -73,16 +137,20 @@ cd backend
 .\mvnw.cmd spring-boot:run
 ```
 
-Tests currently use H2 through `backend/src/test/resources/application.properties`.
-A successful H2 test does not verify Supabase connectivity or production migrations.
-The SQL migration is in `backend/src/main/resources/db/migration/`.
-Copy `backend/.env.example` into a local, untracked environment file or configure
-the variables in your process environment; do not commit real credentials.
+Tests use H2; they do not validate production PostgreSQL migrations, live JWT
+verification, or a real Supabase Storage bucket. Database migrations are under
+`backend/src/main/resources/db/migration/`.
 
-## Current delivery status
+## Repository map
 
-Static analysis, the existing automated suites and Android debug APK compilation
-have been run; see [TEST_REPORT.md](./TEST_REPORT.md) for exact results. This
-repository has not been verified against a live Supabase database or a connected
-Android emulator in the latest delivery run. The report documents outstanding
-release blockers; do not treat code presence as proof of production behavior.
+- `mobile/` — Flutter Android app, Drift database, repositories, and sync engine.
+- `backend/` — Spring Boot API, authentication, persistence, and media storage.
+- `TEST_REPORT.md` — detailed executed checks and outstanding verification.
+- `IMPLEMENTATION_PLAN.md` — remaining delivery work and acceptance criteria.
+
+## Security and configuration
+
+Do not commit `.env` files, database passwords, JWT secrets, Supabase service-role
+keys, keystores, or signing passwords. The tracked `.env.example` files are
+templates, not working credentials. If a secret has been committed or shared,
+rotate it in the relevant service before deployment.
