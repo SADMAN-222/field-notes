@@ -62,6 +62,7 @@ void main() {
           updatedAt: now,
           version: 0,
         ),
+        userId,
       );
       expect(await customerCounts.moveNext(), isTrue);
       expect(customerCounts.current, 1);
@@ -80,6 +81,7 @@ void main() {
           updatedAt: now,
           version: 0,
         ),
+        userId,
       );
       expect(await siteCounts.moveNext(), isTrue);
       expect(siteCounts.current, 1);
@@ -100,6 +102,7 @@ void main() {
           updatedAt: now,
           version: 0,
         ),
+        userId,
       );
       expect(await noteCounts.moveNext(), isTrue);
       expect(noteCounts.current, 1);
@@ -114,13 +117,89 @@ void main() {
           updatedAt: now,
           version: 0,
         ),
+        'user-def',
       );
       expect(await customerDao.getCustomerCount(userId), 1);
       expect(await customerDao.getCustomerCount('user-def'), 1);
     },
   );
 
+  test('local records and outbox entries are isolated by account', () async {
+    const userA = 'user-a';
+    const userB = 'user-b';
+    final now = DateTime.now();
+
+    for (final userId in [userA, userB]) {
+      final suffix = userId.substring(userId.length - 1);
+      final customerId = 'customer-$suffix';
+      final siteId = 'site-$suffix';
+
+      await customerRepo.addCustomer(
+        Customer(
+          id: customerId,
+          userId: userId,
+          name: 'Customer $suffix',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+        userId,
+      );
+      await siteRepo.addSite(
+        Site(
+          id: siteId,
+          userId: userId,
+          customerId: customerId,
+          siteName: 'Site $suffix',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+        userId,
+      );
+      await fieldNoteRepo.addNote(
+        FieldNote(
+          id: 'note-$suffix',
+          userId: userId,
+          siteId: siteId,
+          title: 'Note $suffix',
+          status: 'PENDING',
+          recordedAt: now,
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+        userId,
+      );
+    }
+
+    expect((await customerRepo.getAllCustomers(userA)).map((row) => row.id), [
+      'customer-a',
+    ]);
+    expect((await siteRepo.getAllSites(userA)).map((row) => row.id), [
+      'site-a',
+    ]);
+    expect(
+      (await fieldNoteRepo.watchAllNotes(userA).first).map((row) => row.id),
+      ['note-a'],
+    );
+    expect(await customerRepo.getCustomerById('customer-b', userA), isNull);
+    expect(await siteRepo.getSiteById('site-b', userA), isNull);
+    expect(await fieldNoteRepo.getNoteById('note-b', userA), isNull);
+    expect(await outboxDao.getPendingEntries(userA), hasLength(3));
+    expect(await outboxDao.getPendingEntries(userB), hasLength(3));
+    expect(await outboxDao.watchPendingCount(userA).first, 3);
+    expect(await outboxDao.watchPendingCount(userB).first, 3);
+
+    final foreignCustomer = (await customerRepo.getAllCustomers(userB)).single;
+    expect(
+      () => customerRepo.updateCustomer(foreignCustomer, userA),
+      throwsA(isA<StateError>()),
+    );
+  });
+
   test('outbox exposes pending and failed counts independently', () async {
+    const userId = 'outbox-user';
     final pendingId = await db
         .into(db.syncOutbox)
         .insert(
@@ -128,17 +207,18 @@ void main() {
             entityType: 'customer',
             entityId: 'queued-customer',
             operation: 'CREATE',
+            payload: const Value('{"userId":"outbox-user"}'),
             createdAt: DateTime.now(),
           ),
         );
 
-    expect(await outboxDao.watchPendingCount().first, 1);
-    expect(await outboxDao.watchFailedCount().first, 0);
+    expect(await outboxDao.watchPendingCount(userId).first, 1);
+    expect(await outboxDao.watchFailedCount(userId).first, 0);
 
-    await outboxDao.markFailed(pendingId, 'server unavailable');
+    await outboxDao.markFailed(pendingId, userId, 'server unavailable');
 
-    expect(await outboxDao.watchPendingCount().first, 0);
-    expect(await outboxDao.watchFailedCount().first, 1);
+    expect(await outboxDao.watchPendingCount(userId).first, 0);
+    expect(await outboxDao.watchFailedCount(userId).first, 1);
   });
 
   group('CustomerDao & CustomerRepository Offline CRUD & Outbox Queue', () {
@@ -158,9 +238,9 @@ void main() {
           version: 0,
         );
 
-        await customerRepo.addCustomer(customer);
+        await customerRepo.addCustomer(customer, userId);
 
-        final fetched = await customerRepo.getCustomerById('cust-1');
+        final fetched = await customerRepo.getCustomerById('cust-1', userId);
         expect(fetched, isNotNull);
         expect(fetched!.name, equals('Acme Corporation'));
         expect(
@@ -176,7 +256,7 @@ void main() {
         expect(count, equals(1));
 
         // Check Outbox
-        final outboxEntries = await outboxDao.getPendingEntries();
+        final outboxEntries = await outboxDao.getPendingEntries(userId);
         expect(outboxEntries.length, equals(1));
         final entry = outboxEntries.first;
         expect(entry.entityType, equals('customer'));
@@ -202,7 +282,7 @@ void main() {
           updatedAt: now,
           version: 0,
         );
-        await customerRepo.addCustomer(customer);
+        await customerRepo.addCustomer(customer, userId);
 
         final updated = customer.copyWith(
           name: 'Beta Global Industries',
@@ -210,13 +290,13 @@ void main() {
           version: 1,
           updatedAt: DateTime.now(),
         );
-        await customerRepo.updateCustomer(updated);
+        await customerRepo.updateCustomer(updated, userId);
 
-        final fetched = await customerRepo.getCustomerById('cust-2');
+        final fetched = await customerRepo.getCustomerById('cust-2', userId);
         expect(fetched!.name, equals('Beta Global Industries'));
         expect(fetched.contactInformation, equals('new-info@beta.com'));
 
-        final outboxEntries = await outboxDao.getPendingEntries();
+        final outboxEntries = await outboxDao.getPendingEntries(userId);
         expect(outboxEntries.length, equals(2));
         expect(outboxEntries[1].operation, equals('UPDATE'));
         expect(outboxEntries[1].expectedVersion, equals(1));
@@ -235,9 +315,9 @@ void main() {
           updatedAt: now,
           version: 0,
         );
-        await customerRepo.addCustomer(customer);
+        await customerRepo.addCustomer(customer, userId);
 
-        await customerRepo.deleteCustomer(customer);
+        await customerRepo.deleteCustomer(customer, userId);
 
         // Active customer list should now be empty
         final allCustomers = await customerRepo.getAllCustomers(userId);
@@ -247,11 +327,11 @@ void main() {
         expect(count, equals(0));
 
         // But row still exists in DB with deletedAt timestamp
-        final directRow = await customerRepo.getCustomerById('cust-3');
+        final directRow = await customerRepo.getCustomerById('cust-3', userId);
         expect(directRow, isNotNull);
         expect(directRow!.deletedAt, isNotNull);
 
-        final outboxEntries = await outboxDao.getPendingEntries();
+        final outboxEntries = await outboxDao.getPendingEntries(userId);
         expect(outboxEntries.length, equals(2));
         expect(outboxEntries[1].operation, equals('DELETE'));
       },
@@ -268,6 +348,7 @@ void main() {
           updatedAt: now,
           version: 0,
         ),
+        userId,
       );
       await customerRepo.addCustomer(
         Customer(
@@ -279,6 +360,7 @@ void main() {
           updatedAt: now,
           version: 0,
         ),
+        userId,
       );
 
       final searchSolar = await customerRepo
@@ -317,21 +399,21 @@ void main() {
         version: 0,
       );
 
-      await siteRepo.addSite(site);
+      await siteRepo.addSite(site, userId);
 
-      final fetched = await siteRepo.getSiteById('site-1');
+      final fetched = await siteRepo.getSiteById('site-1', userId);
       expect(fetched, isNotNull);
       expect(fetched!.siteName, equals('Downtown Substation'));
       expect(fetched.address, equals('100 Main St, Metropolis'));
 
-      final customerSites = await siteRepo.watchSites(customerId).first;
+      final customerSites = await siteRepo.watchSites(customerId, userId).first;
       expect(customerSites.length, equals(1));
       expect(customerSites.first.id, equals('site-1'));
 
       final allSites = await siteRepo.getAllSites(userId);
       expect(allSites.length, equals(1));
 
-      final outbox = await outboxDao.getPendingEntries();
+      final outbox = await outboxDao.getPendingEntries(userId);
       expect(outbox.length, equals(1));
       expect(outbox.first.entityType, equals('site'));
       expect(outbox.first.entityId, equals('site-1'));
@@ -349,19 +431,19 @@ void main() {
         updatedAt: now,
         version: 0,
       );
-      await siteRepo.addSite(site);
+      await siteRepo.addSite(site, userId);
 
       final updated = site.copyWith(
         siteName: 'North Gate Plant 2',
         version: 1,
         updatedAt: DateTime.now(),
       );
-      await siteRepo.updateSite(updated);
+      await siteRepo.updateSite(updated, userId);
 
-      final fetched = await siteRepo.getSiteById('site-2');
+      final fetched = await siteRepo.getSiteById('site-2', userId);
       expect(fetched!.siteName, equals('North Gate Plant 2'));
 
-      final outbox = await outboxDao.getPendingEntries();
+      final outbox = await outboxDao.getPendingEntries(userId);
       expect(outbox.length, equals(2));
       expect(outbox[1].operation, equals('UPDATE'));
     });
@@ -377,14 +459,14 @@ void main() {
         updatedAt: now,
         version: 0,
       );
-      await siteRepo.addSite(site);
+      await siteRepo.addSite(site, userId);
 
-      await siteRepo.deleteSite(site);
+      await siteRepo.deleteSite(site, userId);
 
       final active = await siteRepo.getAllSites(userId);
       expect(active, isEmpty);
 
-      final outbox = await outboxDao.getPendingEntries();
+      final outbox = await outboxDao.getPendingEntries(userId);
       expect(outbox.length, equals(2));
       expect(outbox[1].operation, equals('DELETE'));
     });
@@ -401,6 +483,7 @@ void main() {
           updatedAt: now,
           version: 0,
         ),
+        userId,
       );
       await siteRepo.addSite(
         Site(
@@ -413,6 +496,7 @@ void main() {
           updatedAt: now,
           version: 0,
         ),
+        userId,
       );
 
       final matchAlpha = await siteRepo.searchSites(userId, 'alpha').first;
@@ -446,16 +530,16 @@ void main() {
         version: 0,
       );
 
-      await fieldNoteRepo.addNote(note);
+      await fieldNoteRepo.addNote(note, userId);
 
-      final fetched = await fieldNoteRepo.getNoteById('note-1');
+      final fetched = await fieldNoteRepo.getNoteById('note-1', userId);
       expect(fetched, isNotNull);
       expect(fetched!.title, equals('Generator Inspection Check'));
       expect(fetched.status, equals('SUBMITTED'));
       expect(fetched.lat, equals(37.7749));
       expect(fetched.lng, equals(-122.4194));
 
-      final siteNotes = await fieldNoteRepo.watchNotes(siteId).first;
+      final siteNotes = await fieldNoteRepo.watchNotes(siteId, userId).first;
       expect(siteNotes.length, equals(1));
 
       final countSubmitted = await fieldNoteRepo.getNotesCount(
@@ -470,7 +554,7 @@ void main() {
       );
       expect(countDraft, equals(0));
 
-      final outbox = await outboxDao.getPendingEntries();
+      final outbox = await outboxDao.getPendingEntries(userId);
       expect(outbox.length, equals(2));
       expect(outbox.first.entityType, equals('note'));
       expect(outbox.first.entityId, equals('note-1'));
@@ -495,7 +579,7 @@ void main() {
         updatedAt: now,
         version: 0,
       );
-      await fieldNoteRepo.addNote(note);
+      await fieldNoteRepo.addNote(note, userId);
 
       final updated = note.copyWith(
         title: 'Finalized Generator Inspection',
@@ -503,13 +587,13 @@ void main() {
         version: 1,
         updatedAt: DateTime.now(),
       );
-      await fieldNoteRepo.updateNote(updated);
+      await fieldNoteRepo.updateNote(updated, userId);
 
-      final fetched = await fieldNoteRepo.getNoteById('note-2');
+      final fetched = await fieldNoteRepo.getNoteById('note-2', userId);
       expect(fetched!.title, equals('Finalized Generator Inspection'));
       expect(fetched.status, equals('SYNCED'));
 
-      final outbox = await outboxDao.getPendingEntries();
+      final outbox = await outboxDao.getPendingEntries(userId);
       expect(outbox.length, equals(2));
       expect(outbox[1].operation, equals('UPDATE'));
     });
@@ -527,19 +611,43 @@ void main() {
         updatedAt: now,
         version: 0,
       );
-      await fieldNoteRepo.addNote(note);
+      await fieldNoteRepo.addNote(note, userId);
 
-      await fieldNoteRepo.deleteNote(note);
+      await fieldNoteRepo.deleteNote(note, userId);
 
-      final active = await fieldNoteRepo.watchNotes(siteId).first;
+      final active = await fieldNoteRepo.watchNotes(siteId, userId).first;
       expect(active, isEmpty);
 
-      final outbox = await outboxDao.getPendingEntries();
+      final outbox = await outboxDao.getPendingEntries(userId);
       expect(outbox.length, equals(2));
       expect(outbox[1].operation, equals('DELETE'));
     });
 
     test('watchAllNotes supports filtering by status and query', () async {
+      await customerRepo.addCustomer(
+        Customer(
+          id: 'customer-100',
+          userId: userId,
+          name: 'Acme Utilities',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+        userId,
+      );
+      await siteRepo.addSite(
+        Site(
+          id: siteId,
+          userId: userId,
+          customerId: 'customer-100',
+          siteName: 'North Ridge Plant',
+          address: '100 Ridge Road',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        ),
+        userId,
+      );
       await fieldNoteRepo.addNote(
         FieldNote(
           id: 'n1',
@@ -553,6 +661,7 @@ void main() {
           updatedAt: now,
           version: 0,
         ),
+        userId,
       );
       await fieldNoteRepo.addNote(
         FieldNote(
@@ -567,6 +676,7 @@ void main() {
           updatedAt: now,
           version: 0,
         ),
+        userId,
       );
 
       // Filter by status
@@ -588,6 +698,16 @@ void main() {
           .first;
       expect(filterNotes.length, equals(1));
       expect(filterNotes.first.id, equals('n1'));
+
+      final siteMatches = await fieldNoteRepo
+          .watchAllNotes(userId, query: 'north ridge')
+          .first;
+      expect(siteMatches.map((note) => note.id), containsAll(['n1', 'n2']));
+
+      final customerMatches = await fieldNoteRepo
+          .watchAllNotes(userId, query: 'acme utilities')
+          .first;
+      expect(customerMatches.map((note) => note.id), containsAll(['n1', 'n2']));
     });
   });
 
@@ -604,35 +724,37 @@ void main() {
           updatedAt: DateTime.now(),
           version: 0,
         ),
+        'user-x',
       );
 
-      final pendingBefore = await outboxDao.getPendingEntries();
+      const userId = 'user-x';
+      final pendingBefore = await outboxDao.getPendingEntries(userId);
       expect(pendingBefore.length, equals(1));
       final entryId = pendingBefore.first.id;
 
       // Mark as failed
-      await outboxDao.markFailed(entryId, '500 Server Internal Error');
+      await outboxDao.markFailed(entryId, userId, '500 Server Internal Error');
 
       // Now pending should be empty because it is FAILED
-      final pendingAfterFail = await outboxDao.getPendingEntries();
+      final pendingAfterFail = await outboxDao.getPendingEntries(userId);
       expect(pendingAfterFail, isEmpty);
 
       // Verify failed state and retry count
-      final allOutbox = await outboxDao.watchAllOutbox().first;
+      final allOutbox = await outboxDao.watchAllOutbox(userId).first;
       expect(allOutbox.first.state, equals('FAILED'));
       expect(allOutbox.first.retryCount, equals(1));
       expect(allOutbox.first.lastError, equals('500 Server Internal Error'));
 
       // Retry all failed
-      await outboxDao.retryAllFailed();
-      final pendingAfterRetry = await outboxDao.getPendingEntries();
+      await outboxDao.retryAllFailed(userId);
+      final pendingAfterRetry = await outboxDao.getPendingEntries(userId);
       expect(pendingAfterRetry.length, equals(1));
       expect(pendingAfterRetry.first.state, equals('PENDING'));
       expect(pendingAfterRetry.first.lastError, isNull);
 
       // Remove entry
-      await outboxDao.removeEntries([entryId]);
-      final pendingAfterRemove = await outboxDao.getPendingEntries();
+      await outboxDao.removeEntries([entryId], userId);
+      final pendingAfterRemove = await outboxDao.getPendingEntries(userId);
       expect(pendingAfterRemove, isEmpty);
     });
   });

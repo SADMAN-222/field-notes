@@ -54,7 +54,7 @@ class _SiteFormScreenState extends State<SiteFormScreen> {
       final customers = await custRepo.getAllCustomers(userId);
       Site? site;
       if (isEditing) {
-        site = await siteRepo.getSiteById(widget.siteId!);
+        site = await siteRepo.getSiteById(widget.siteId!, userId);
         if (site == null) {
           throw StateError('Site was not found.');
         }
@@ -118,7 +118,7 @@ class _SiteFormScreenState extends State<SiteFormScreen> {
           updatedAt: DateTime.now().toUtc(),
           version: _existingSite!.version + 1,
         );
-        await siteRepo.updateSite(updated);
+        await siteRepo.updateSite(updated, userId);
       } else {
         final newSite = Site(
           id: const Uuid().v4(),
@@ -132,7 +132,7 @@ class _SiteFormScreenState extends State<SiteFormScreen> {
           updatedAt: DateTime.now().toUtc(),
           version: 0,
         );
-        await siteRepo.addSite(newSite);
+        await siteRepo.addSite(newSite, userId);
       }
 
       if (mounted) {

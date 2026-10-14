@@ -8,39 +8,34 @@ class PhotoService {
   final ImagePicker _picker = ImagePicker();
   final Uuid _uuid = const Uuid();
 
-  Future<String?> capturePhoto() async {
-    try {
-      final XFile? photo = await _picker.pickImage(
-        source: ImageSource.camera,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 85,
-      );
-      if (photo == null) return null;
-      return await _savePhotoLocally(photo);
-    } catch (_) {
-      return null;
-    }
+  Future<String?> capturePhoto({required String userId}) async {
+    final XFile? photo = await _picker.pickImage(
+      source: ImageSource.camera,
+      maxWidth: 1920,
+      maxHeight: 1080,
+      imageQuality: 85,
+    );
+    if (photo == null) return null;
+    return _savePhotoLocally(photo, userId);
   }
 
-  Future<String?> pickFromGallery() async {
-    try {
-      final XFile? photo = await _picker.pickImage(
-        source: ImageSource.gallery,
-        maxWidth: 1920,
-        maxHeight: 1080,
-        imageQuality: 85,
-      );
-      if (photo == null) return null;
-      return await _savePhotoLocally(photo);
-    } catch (_) {
-      return null;
-    }
+  Future<String?> pickFromGallery({required String userId}) async {
+    final XFile? photo = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1920,
+      maxHeight: 1080,
+      imageQuality: 85,
+    );
+    if (photo == null) return null;
+    return _savePhotoLocally(photo, userId);
   }
 
-  Future<String> _savePhotoLocally(XFile pickedFile) async {
+  Future<String> _savePhotoLocally(XFile pickedFile, String userId) async {
+    if (userId.isEmpty || p.basename(userId) != userId) {
+      throw StateError('A valid active account is required to save a photo.');
+    }
     final appDir = await getApplicationDocumentsDirectory();
-    final photosDir = Directory(p.join(appDir.path, 'photos'));
+    final photosDir = Directory(p.join(appDir.path, 'photos', userId));
     if (!await photosDir.exists()) {
       await photosDir.create(recursive: true);
     }
@@ -54,13 +49,11 @@ class PhotoService {
   }
 
   Future<bool> deletePhoto(String path) async {
-    try {
-      final file = File(path);
-      if (await file.exists()) {
-        await file.delete();
-        return true;
-      }
-    } catch (_) {}
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+      return true;
+    }
     return false;
   }
 
@@ -69,4 +62,3 @@ class PhotoService {
     return File(path).existsSync();
   }
 }
-

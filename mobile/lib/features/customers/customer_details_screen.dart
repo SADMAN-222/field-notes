@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/config/injection.dart' as di;
 import '../../core/database/database.dart';
@@ -6,6 +7,7 @@ import '../../core/database/daos/sites_dao.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/common_widgets.dart';
 import '../../core/widgets/sync_indicator.dart';
+import '../authentication/auth_cubit.dart';
 import 'customer_repository.dart';
 
 class CustomerDetailsScreen extends StatelessWidget {
@@ -17,9 +19,10 @@ class CustomerDetailsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final customerRepo = di.sl<CustomerRepository>();
     final sitesDao = di.sl<SitesDao>();
+    final userId = context.watch<AuthCubit>().currentUserId ?? '';
 
     return StreamBuilder<Customer?>(
-      stream: customerRepo.watchCustomerById(customerId),
+      stream: customerRepo.watchCustomerById(customerId, userId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
@@ -185,7 +188,7 @@ class CustomerDetailsScreen extends StatelessWidget {
 
                 // Stream of Sites
                 StreamBuilder<List<Site>>(
-                  stream: sitesDao.watchSitesByCustomer(customer.id),
+                  stream: sitesDao.watchSitesByCustomer(customer.id, userId),
                   builder: (context, siteSnapshot) {
                     if (siteSnapshot.connectionState ==
                         ConnectionState.waiting) {
@@ -334,7 +337,11 @@ class CustomerDetailsScreen extends StatelessWidget {
             onPressed: () async {
               Navigator.of(ctx).pop();
               try {
-                await repo.deleteCustomer(customer);
+                final userId = context.read<AuthCubit>().currentUserId;
+                if (userId == null || userId.isEmpty) {
+                  throw StateError('No active user session.');
+                }
+                await repo.deleteCustomer(customer, userId);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(

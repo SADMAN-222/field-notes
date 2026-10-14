@@ -1,3 +1,4 @@
+
 import 'package:flutter/material.dart';
 import '../theme/app_colors.dart';
 
@@ -28,10 +29,7 @@ class AppCard extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Padding(
-          padding: padding,
-          child: child,
-        ),
+        child: Padding(padding: padding, child: child),
       ),
     );
   }
@@ -54,9 +52,14 @@ class StatusBadge extends StatelessWidget {
         fg = AppColors.statusCompleted;
         break;
       case 'IN_PROGRESS':
+      case 'PENDING':
       case 'SUBMITTED':
         bg = AppColors.statusInProgressBg;
         fg = AppColors.statusInProgress;
+        break;
+      case 'CANCELLED':
+        bg = AppColors.surfaceSubtle;
+        fg = AppColors.textSecondary;
         break;
       case 'FLAGGED':
         bg = AppColors.statusFlaggedBg;

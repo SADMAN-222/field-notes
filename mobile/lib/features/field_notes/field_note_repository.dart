@@ -7,8 +7,8 @@ class FieldNoteRepository {
 
   FieldNoteRepository({required this.fieldNotesDao});
 
-  Stream<List<FieldNote>> watchNotes(String siteId) =>
-      fieldNotesDao.watchNotesBySite(siteId);
+  Stream<List<FieldNote>> watchNotes(String siteId, String userId) =>
+      fieldNotesDao.watchNotesBySite(siteId, userId);
 
   Stream<List<FieldNote>> watchAllNotes(
     String userId, {
@@ -26,23 +26,34 @@ class FieldNoteRepository {
   Stream<List<FieldNote>> watchRecentNotes(String userId, {int limit = 5}) =>
       fieldNotesDao.watchRecentNotes(userId, limit: limit);
 
-  Future<FieldNote?> getNoteById(String id) =>
-      fieldNotesDao.getNoteById(id);
+  Future<FieldNote?> getNoteById(String id, String userId) =>
+      fieldNotesDao.getNoteById(id, userId);
 
-  Stream<FieldNote?> watchNoteById(String id) =>
-      fieldNotesDao.watchNoteById(id);
+  Stream<FieldNote?> watchNoteById(String id, String userId) =>
+      fieldNotesDao.watchNoteById(id, userId);
 
   Future<int> getNotesCount(String userId, {String? status}) =>
       fieldNotesDao.getNotesCount(userId, status: status);
 
-  Future<void> addNote(FieldNote note) {
+  Future<void> addNote(FieldNote note, String userId) {
+    if (note.userId != userId) {
+      throw StateError('Field note does not belong to the active account.');
+    }
     debugPrint('FieldNoteRepository.addNote: ${note.userId}, ID: ${note.id}, Site: ${note.siteId}');
     return fieldNotesDao.createNote(note);
   }
 
-  Future<void> updateNote(FieldNote note) =>
-      fieldNotesDao.updateNote(note);
+  Future<void> updateNote(FieldNote note, String userId) {
+    if (note.userId != userId) {
+      throw StateError('Field note does not belong to the active account.');
+    }
+    return fieldNotesDao.updateNote(note);
+  }
 
-  Future<void> deleteNote(FieldNote note) =>
-      fieldNotesDao.deleteNote(note);
+  Future<void> deleteNote(FieldNote note, String userId) {
+    if (note.userId != userId) {
+      throw StateError('Field note does not belong to the active account.');
+    }
+    return fieldNotesDao.deleteNote(note);
+  }
 }

@@ -56,8 +56,15 @@ class PreferencesService {
 
   static const _keyDefaultNoteStatus = 'pref_default_note_status';
 
-  String get defaultNoteStatus =>
-      _prefs.getString(_keyDefaultNoteStatus) ?? 'DRAFT';
+  String get defaultNoteStatus {
+    final status = _prefs.getString(_keyDefaultNoteStatus) ?? 'PENDING';
+    return switch (status) {
+      'DRAFT' => 'PENDING',
+      'SUBMITTED' => 'IN_PROGRESS',
+      'PENDING' || 'IN_PROGRESS' || 'COMPLETED' || 'CANCELLED' => status,
+      _ => 'PENDING',
+    };
+  }
   Future<void> setDefaultNoteStatus(String status) async =>
       await _prefs.setString(_keyDefaultNoteStatus, status);
 

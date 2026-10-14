@@ -98,7 +98,7 @@ class _SitesScreenState extends State<SitesScreen> {
               child: StreamBuilder<List<Site>>(
                 stream: _searchQuery.isEmpty
                     ? (widget.customerId != null
-                          ? siteRepo.watchSites(widget.customerId!)
+                          ? siteRepo.watchSites(widget.customerId!, userId)
                           : siteRepo.watchAllSites(userId))
                     : siteRepo.searchSites(
                         userId,
@@ -198,6 +198,7 @@ class _SitesScreenState extends State<SitesScreen> {
                                       FutureBuilder<Customer?>(
                                         future: customerDao.getCustomerById(
                                           site.customerId,
+                                          userId,
                                         ),
                                         builder: (context, custSnap) {
                                           final custName =
@@ -233,6 +234,7 @@ class _SitesScreenState extends State<SitesScreen> {
                                       StreamBuilder<List<FieldNote>>(
                                         stream: fieldNotesDao.watchNotesBySite(
                                           site.id,
+                                          userId,
                                         ),
                                         builder: (context, noteSnap) {
                                           final count =

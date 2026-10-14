@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../config/injection.dart';
 import '../database/daos/outbox_dao.dart';
 import '../sync/sync_engine.dart';
 import '../theme/app_colors.dart';
+import '../../features/authentication/auth_cubit.dart';
 
 class SyncIndicator extends StatelessWidget {
   const SyncIndicator({super.key});
@@ -12,6 +14,7 @@ class SyncIndicator extends StatelessWidget {
   Widget build(BuildContext context) {
     final outboxDao = sl<OutboxDao>();
     final syncEngine = sl<SyncEngine>();
+    final userId = context.watch<AuthCubit>().currentUserId ?? '';
 
     return StreamBuilder<bool>(
       stream: syncEngine.isSyncingStream,
@@ -20,10 +23,10 @@ class SyncIndicator extends StatelessWidget {
         final isSyncing = syncingSnap.data ?? false;
 
         return StreamBuilder<int>(
-          stream: outboxDao.watchPendingCount(),
+          stream: outboxDao.watchPendingCount(userId),
           builder: (context, pendingSnap) {
             return StreamBuilder<int>(
-              stream: outboxDao.watchFailedCount(),
+              stream: outboxDao.watchFailedCount(userId),
               builder: (context, failedSnap) {
             final pendingCount = pendingSnap.data;
             final failedCount = failedSnap.data;

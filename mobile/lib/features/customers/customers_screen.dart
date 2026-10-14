@@ -185,6 +185,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                   FutureBuilder<List<Site>>(
                                     future: sitesDao.getSitesByCustomer(
                                       customer.id,
+                                      userId,
                                     ),
                                     builder: (context, siteSnap) {
                                       final count = siteSnap.data?.length ?? 0;

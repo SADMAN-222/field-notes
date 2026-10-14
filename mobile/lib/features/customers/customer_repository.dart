@@ -16,23 +16,34 @@ class CustomerRepository {
   Stream<List<Customer>> searchCustomers(String userId, String query) =>
       customerDao.searchCustomers(userId, query);
 
-  Future<Customer?> getCustomerById(String id) =>
-      customerDao.getCustomerById(id);
+  Future<Customer?> getCustomerById(String id, String userId) =>
+      customerDao.getCustomerById(id, userId);
 
-  Stream<Customer?> watchCustomerById(String id) =>
-      customerDao.watchCustomerById(id);
+  Stream<Customer?> watchCustomerById(String id, String userId) =>
+      customerDao.watchCustomerById(id, userId);
 
   Future<int> getCustomerCount(String userId) =>
       customerDao.getCustomerCount(userId);
 
-  Future<void> addCustomer(Customer customer) {
+  Future<void> addCustomer(Customer customer, String userId) {
+    if (customer.userId != userId) {
+      throw StateError('Customer does not belong to the active account.');
+    }
     debugPrint('CustomerRepository.addCustomer: ${customer.userId}, ID: ${customer.id}');
     return customerDao.createCustomer(customer);
   }
 
-  Future<void> updateCustomer(Customer customer) =>
-      customerDao.updateCustomer(customer);
+  Future<void> updateCustomer(Customer customer, String userId) {
+    if (customer.userId != userId) {
+      throw StateError('Customer does not belong to the active account.');
+    }
+    return customerDao.updateCustomer(customer);
+  }
 
-  Future<void> deleteCustomer(Customer customer) =>
-      customerDao.deleteCustomer(customer);
+  Future<void> deleteCustomer(Customer customer, String userId) {
+    if (customer.userId != userId) {
+      throw StateError('Customer does not belong to the active account.');
+    }
+    return customerDao.deleteCustomer(customer);
+  }
 }

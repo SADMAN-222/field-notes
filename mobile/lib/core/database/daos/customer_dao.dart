@@ -23,12 +23,16 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
         .get();
   }
 
-  Future<Customer?> getCustomerById(String id) {
-    return (select(customers)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+  Future<Customer?> getCustomerById(String id, String userId) {
+    return (select(customers)
+          ..where((tbl) => tbl.id.equals(id) & tbl.userId.equals(userId)))
+        .getSingleOrNull();
   }
 
-  Stream<Customer?> watchCustomerById(String id) {
-    return (select(customers)..where((tbl) => tbl.id.equals(id))).watchSingleOrNull();
+  Stream<Customer?> watchCustomerById(String id, String userId) {
+    return (select(customers)
+          ..where((tbl) => tbl.id.equals(id) & tbl.userId.equals(userId)))
+        .watchSingleOrNull();
   }
 
   Stream<List<Customer>> searchCustomers(String userId, String query) {
@@ -87,7 +91,16 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
 
   Future<void> updateCustomer(Customer customer) {
     return transaction(() async {
-      await update(customers).replace(customer);
+      final updated = await (update(customers)
+            ..where(
+              (tbl) =>
+                  tbl.id.equals(customer.id) &
+                  tbl.userId.equals(customer.userId),
+            ))
+          .write(customer.toCompanion(true));
+      if (updated != 1) {
+        throw StateError('Customer does not belong to the active account.');
+      }
 
       final payload = jsonEncode({
         'id': customer.id,
@@ -113,8 +126,19 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
 
   Future<void> deleteCustomer(Customer customer) {
     return transaction(() async {
-      final deletedCustomer = customer.copyWith(deletedAt: Value(DateTime.now()));
-      await update(customers).replace(deletedCustomer);
+      final deletedCustomer = customer.copyWith(
+        deletedAt: Value(DateTime.now()),
+      );
+      final updated = await (update(customers)
+            ..where(
+              (tbl) =>
+                  tbl.id.equals(customer.id) &
+                  tbl.userId.equals(customer.userId),
+            ))
+          .write(CustomersCompanion(deletedAt: Value(deletedCustomer.deletedAt)));
+      if (updated != 1) {
+        throw StateError('Customer does not belong to the active account.');
+      }
 
       final payload = jsonEncode({
         'id': customer.id,
@@ -142,8 +166,11 @@ class CustomerDao extends DatabaseAccessor<AppDatabase> with _$CustomerDaoMixin 
     await into(customers).insertOnConflictUpdate(customer);
   }
 
-  Future<void> deleteFromServer(String customerId) async {
-    await (update(customers)..where((t) => t.id.equals(customerId)))
+  Future<void> deleteFromServer(String customerId, String userId) async {
+    await (update(customers)
+          ..where(
+            (t) => t.id.equals(customerId) & t.userId.equals(userId),
+          ))
         .write(CustomersCompanion(deletedAt: Value(DateTime.now())));
   }
 }

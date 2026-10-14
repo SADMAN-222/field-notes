@@ -99,7 +99,7 @@ void main() {
           ),
         );
 
-        final pendingBefore = await outboxDao.getPendingEntries();
+        final pendingBefore = await outboxDao.getPendingEntries('user-123');
         expect(pendingBefore.length, equals(1));
 
         // Mock Dio push response
@@ -116,7 +116,7 @@ void main() {
         await syncEngine.push();
 
         // Pending outbox entries should have been safely deleted
-        final pendingAfter = await outboxDao.getPendingEntries();
+        final pendingAfter = await outboxDao.getPendingEntries('user-123');
         expect(pendingAfter, isEmpty);
       },
     );
@@ -155,12 +155,108 @@ void main() {
         await syncEngine.push();
       } catch (_) {}
 
-      final pendingAfter = await outboxDao.getPendingEntries();
+      final pendingAfter = await outboxDao.getPendingEntries('user-123');
       expect(pendingAfter, isEmpty); // No longer PENDING
 
-      final allOutbox = await outboxDao.watchAllOutbox().first;
+      final allOutbox = await outboxDao.watchAllOutbox('user-123').first;
       expect(allOutbox.first.state, equals('FAILED'));
     });
+
+    test(
+      'a stale local mutation is preserved, rebased explicitly, then retried',
+      () async {
+        when(
+          () => mockSecureStorage.getAccessToken(),
+        ).thenAnswer((_) async => 'valid-jwt');
+        when(
+          () => mockSecureStorage.getUserId(),
+        ).thenAnswer((_) async => 'user-123');
+
+        final now = DateTime.now();
+        final original = Customer(
+          id: 'customer-conflict',
+          userId: 'user-123',
+          name: 'Server base',
+          createdAt: now,
+          updatedAt: now,
+          version: 0,
+        );
+        await customerDao.createCustomer(original);
+        await customerDao.updateCustomer(
+          original.copyWith(
+            name: 'Local offline edit',
+            version: 1,
+            updatedAt: now.add(const Duration(minutes: 1)),
+          ),
+        );
+
+        when(
+          () => mockDio.post('/api/v1/sync/push', data: any(named: 'data')),
+        ).thenThrow(
+          DioException(
+            requestOptions: RequestOptions(path: '/api/v1/sync/push'),
+            response: Response(
+              requestOptions: RequestOptions(path: '/api/v1/sync/push'),
+              statusCode: 409,
+              data: {
+                'code': 'SYNC_CONFLICT',
+                'conflicts': [
+                  {
+                    'entityType': 'customer',
+                    'entityId': 'customer-conflict',
+                    'serverVersion': 2,
+                  },
+                ],
+              },
+            ),
+          ),
+        );
+
+        await expectLater(syncEngine.push(), throwsA(isA<StateError>()));
+        final locallyPreserved = await customerDao.getCustomerById(
+          'customer-conflict',
+          'user-123',
+        );
+        expect(locallyPreserved?.name, 'Local offline edit');
+        expect(locallyPreserved?.version, 1);
+        final conflictEntries = await outboxDao
+            .watchAllOutbox('user-123')
+            .first;
+        expect(conflictEntries, hasLength(2));
+        expect(
+          conflictEntries.every((entry) => entry.state == 'CONFLICT'),
+          isTrue,
+        );
+
+        await outboxDao.resolveConflictKeepLocal(
+          conflictEntries.first.id,
+          'user-123',
+        );
+        when(
+          () => mockDio.post('/api/v1/sync/push', data: any(named: 'data')),
+        ).thenAnswer(
+          (_) async => Response(
+            requestOptions: RequestOptions(path: '/api/v1/sync/push'),
+            statusCode: 200,
+            data: {'status': 'SUCCESS'},
+          ),
+        );
+
+        await syncEngine.push();
+        expect(await outboxDao.getPendingEntries('user-123'), isEmpty);
+        final retry =
+            verify(
+                  () => mockDio.post(
+                    '/api/v1/sync/push',
+                    data: captureAny(named: 'data'),
+                  ),
+                ).captured.last
+                as Map<String, dynamic>;
+        final retryCustomer = (retry['customers'] as List).single as Map;
+        expect(retryCustomer['version'], 3);
+        expect(retryCustomer['name'], 'Local offline edit');
+      },
+    );
 
     test("push does not send another user's outbox entries", () async {
       when(
@@ -182,12 +278,12 @@ void main() {
       await syncEngine.push();
 
       verifyNever(() => mockDio.post(any(), data: any(named: 'data')));
-      final entries = await outboxDao.watchAllOutbox().first;
-      expect(entries.single.state, equals('FAILED'));
-      expect(
-        entries.single.lastError,
-        contains('does not match the authenticated user'),
-      );
+      final userEntries = await outboxDao.watchAllOutbox('user-123').first;
+      final authenticatedUserEntries = await outboxDao
+          .watchAllOutbox('user-456')
+          .first;
+      expect(userEntries.single.state, equals('PENDING'));
+      expect(authenticatedUserEntries, isEmpty);
     });
 
     test(
@@ -266,6 +362,7 @@ void main() {
         // Verify records are inserted into SQLite
         final pulledCustomer = await customerDao.getCustomerById(
           'remote-cust-1',
+          'user-123',
         );
         expect(pulledCustomer, isNotNull);
         expect(pulledCustomer!.name, equals('Remote Customer Inc'));

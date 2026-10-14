@@ -31,7 +31,7 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
   final _descController = TextEditingController();
 
   String? _selectedSiteId;
-  String _status = 'DRAFT';
+  String _status = 'PENDING';
   double? _latitude;
   double? _longitude;
   String? _photoPath;
@@ -44,8 +44,8 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
   List<Site> _sites = [];
 
   final List<String> _statusOptions = [
-    'DRAFT',
-    'SUBMITTED',
+    'PENDING',
+    'IN_PROGRESS',
     'COMPLETED',
     'CANCELLED',
   ];
@@ -76,7 +76,10 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
       FieldNote? note;
 
       if (isEditing) {
-        note = await noteRepo.getNoteById(widget.noteId!);
+        if (userId.isEmpty) {
+          throw StateError('No active user session.');
+        }
+        note = await noteRepo.getNoteById(widget.noteId!, userId);
         if (note == null) {
           throw StateError('Field note was not found.');
         }
@@ -170,9 +173,13 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
   Future<void> _pickPhoto(bool fromCamera) async {
     try {
       final photoService = di.sl<PhotoService>();
+      final userId = context.read<AuthCubit>().currentUserId;
+      if (userId == null || userId.isEmpty) {
+        throw StateError('An active account is required to attach a photo.');
+      }
       final path = fromCamera
-          ? await photoService.capturePhoto()
-          : await photoService.pickFromGallery();
+          ? await photoService.capturePhoto(userId: userId)
+          : await photoService.pickFromGallery(userId: userId);
 
       if (mounted && path != null) {
         setState(() => _photoPath = path);
@@ -225,7 +232,7 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
           updatedAt: DateTime.now().toUtc(),
           version: _existingNote!.version + 1,
         );
-        await noteRepo.updateNote(updatedNote);
+        await noteRepo.updateNote(updatedNote, userId);
       } else {
         final newNote = FieldNote(
           id: const Uuid().v4(),
@@ -244,7 +251,7 @@ class _NoteFormScreenState extends State<NoteFormScreen> {
           updatedAt: DateTime.now().toUtc(),
           version: 0,
         );
-        await noteRepo.addNote(newNote);
+        await noteRepo.addNote(newNote, userId);
       }
 
       if (mounted) {

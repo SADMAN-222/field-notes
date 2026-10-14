@@ -5,6 +5,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import '../database/database.dart';
 import '../database/daos/outbox_dao.dart';
 import '../security/secure_storage.dart';
@@ -105,7 +106,10 @@ class SyncEngine {
 
   Future<void> push() async {
     final currentUserId = await secureStorage.getUserId();
-    final pendingEntries = await outboxDao.getPendingEntries();
+    if (currentUserId == null || currentUserId.isEmpty) {
+      throw StateError('No authenticated user available for synchronization.');
+    }
+    final pendingEntries = await outboxDao.getPendingEntries(currentUserId);
     if (pendingEntries.isEmpty) return;
 
     final customerList = <Map<String, dynamic>>[];
@@ -117,13 +121,18 @@ class SyncEngine {
     for (final entry in pendingEntries) {
       try {
         if (entry.payload == null) {
-          await outboxDao.markFailed(entry.id, 'Outbox entry has no payload.');
+          await outboxDao.markFailed(
+            entry.id,
+            currentUserId,
+            'Outbox entry has no payload.',
+          );
           continue;
         }
         final payload = jsonDecode(entry.payload!) as Map<String, dynamic>;
         if (payload['userId'] != currentUserId) {
           await outboxDao.markFailed(
             entry.id,
+            currentUserId,
             'Outbox entry user does not match the authenticated user.',
           );
           continue;
@@ -159,7 +168,7 @@ class SyncEngine {
             'site': {'id': payload['siteId']},
             'title': payload['title'],
             'description': payload['description'],
-            'status': payload['status'] ?? 'DRAFT',
+            'status': payload['status'] ?? 'PENDING',
             'lat': payload['lat'],
             'lng': payload['lng'],
             'recordedAt': payload['recordedAt'],
@@ -176,6 +185,7 @@ class SyncEngine {
           if (noteId == null || photoPath == null || photoPath.isEmpty) {
             await outboxDao.markFailed(
               entry.id,
+              currentUserId,
               'Photo outbox entry is missing the note ID or local path.',
             );
             continue;
@@ -188,11 +198,16 @@ class SyncEngine {
         } else {
           await outboxDao.markFailed(
             entry.id,
+            currentUserId,
             'Unsupported outbox entity type: ${entry.entityType}.',
           );
         }
       } catch (err) {
-        await outboxDao.markFailed(entry.id, _describeError(err));
+        await outboxDao.markFailed(
+          entry.id,
+          currentUserId,
+          _describeError(err),
+        );
       }
     }
 
@@ -207,18 +222,58 @@ class SyncEngine {
         final response = await dio.post('/api/v1/sync/push', data: pushPayload);
 
         if (response.statusCode == 200 || response.statusCode == 204) {
-          await outboxDao.removeEntries(processedIds);
+          await outboxDao.removeEntries(processedIds, currentUserId);
         } else {
           for (final id in processedIds) {
             await outboxDao.markFailed(
               id,
+              currentUserId,
               'Server returned status ${response.statusCode}',
             );
           }
         }
       } catch (e) {
+        if (e is DioException && e.response?.statusCode == 409) {
+          final body = e.response?.data;
+          final conflictDetails = jsonEncode(
+            body is Map<String, dynamic>
+                ? body
+                : {'code': 'SYNC_CONFLICT', 'message': body?.toString()},
+          );
+          final conflictKeys = <String>{};
+          if (body is Map && body['conflicts'] is List) {
+            for (final conflict in body['conflicts'] as List) {
+              if (conflict is Map &&
+                  conflict['entityType'] != null &&
+                  conflict['entityId'] != null) {
+                conflictKeys.add(
+                  '${conflict['entityType']}:${conflict['entityId']}',
+                );
+              }
+            }
+          }
+          for (final id in processedIds) {
+            final entry = pendingEntries.firstWhere(
+              (candidate) => candidate.id == id,
+            );
+            final payload = jsonDecode(entry.payload!) as Map<String, dynamic>;
+            final key = '${entry.entityType}:${payload['id']}';
+            if (conflictKeys.contains(key)) {
+              await outboxDao.markConflict(id, currentUserId, conflictDetails);
+            } else {
+              await outboxDao.markFailed(
+                id,
+                currentUserId,
+                'The batch was rejected because another record has a sync conflict.',
+              );
+            }
+          }
+          throw StateError(
+            'Synchronization conflict detected. Local edits were retained; resolve the conflict before retrying.',
+          );
+        }
         for (final id in processedIds) {
-          await outboxDao.markFailed(id, _describeError(e));
+          await outboxDao.markFailed(id, currentUserId, _describeError(e));
         }
         rethrow;
       }
@@ -241,22 +296,31 @@ class SyncEngine {
           data: formData,
         );
         if (response.statusCode == 200 || response.statusCode == 204) {
-          await outboxDao.removeEntries([upload.outboxId]);
+          await outboxDao.removeEntries([upload.outboxId], currentUserId);
         } else {
           await outboxDao.markFailed(
             upload.outboxId,
+            currentUserId,
             'Photo upload returned status ${response.statusCode}.',
           );
         }
       } catch (error) {
-        await outboxDao.markFailed(upload.outboxId, _describeError(error));
+        await outboxDao.markFailed(
+          upload.outboxId,
+          currentUserId,
+          _describeError(error),
+        );
         rethrow;
       }
     }
   }
 
   Future<void> pull() async {
-    final cursor = await _getCursor();
+    final currentUserId = await secureStorage.getUserId();
+    if (currentUserId == null || currentUserId.isEmpty) {
+      throw StateError('No authenticated user available for synchronization.');
+    }
+    final cursor = await _getCursor(currentUserId);
     final queryParams = <String, dynamic>{};
     if (cursor.isNotEmpty && cursor != '1970-01-01T00:00:00Z') {
       queryParams['cursor'] = cursor;
@@ -269,8 +333,7 @@ class SyncEngine {
 
     if (response.statusCode == 200) {
       final data = response.data as Map<String, dynamic>;
-      final currentUserId = await secureStorage.getUserId() ?? '';
-
+      final nextCursor = data['nextCursor']?.toString();
       await db.transaction(() async {
         // 1. Process Customers
         if (data['customers'] is List) {
@@ -301,8 +364,11 @@ class SyncEngine {
         // 2. Process Deleted Customer IDs
         if (data['deletedCustomerIds'] is List) {
           for (final id in data['deletedCustomerIds']) {
-            await (db.update(db.customers)
-                  ..where((t) => t.id.equals(id.toString())))
+            await (db.update(db.customers)..where(
+                  (t) =>
+                      t.id.equals(id.toString()) &
+                      t.userId.equals(currentUserId),
+                ))
                 .write(CustomersCompanion(deletedAt: Value(DateTime.now())));
           }
         }
@@ -342,8 +408,11 @@ class SyncEngine {
         // 4. Process Deleted Site IDs
         if (data['deletedSiteIds'] is List) {
           for (final id in data['deletedSiteIds']) {
-            await (db.update(db.sites)
-                  ..where((t) => t.id.equals(id.toString())))
+            await (db.update(db.sites)..where(
+                  (t) =>
+                      t.id.equals(id.toString()) &
+                      t.userId.equals(currentUserId),
+                ))
                 .write(SitesCompanion(deletedAt: Value(DateTime.now())));
           }
         }
@@ -364,7 +433,7 @@ class SyncEngine {
                       siteId: siteId,
                       title: fn['title']?.toString() ?? '',
                       description: Value(fn['description']?.toString()),
-                      status: fn['status']?.toString() ?? 'DRAFT',
+                      status: fn['status']?.toString() ?? 'PENDING',
                       lat: Value((fn['lat'] as num?)?.toDouble()),
                       lng: Value((fn['lng'] as num?)?.toDouble()),
                       recordedAt: fn['recordedAt'] != null
@@ -388,38 +457,87 @@ class SyncEngine {
         // 6. Process Deleted Note IDs
         if (data['deletedFieldNoteIds'] is List) {
           for (final id in data['deletedFieldNoteIds']) {
-            await (db.update(db.fieldNotes)
-                  ..where((t) => t.id.equals(id.toString())))
+            await (db.update(db.fieldNotes)..where(
+                  (t) =>
+                      t.id.equals(id.toString()) &
+                      t.userId.equals(currentUserId),
+                ))
                 .write(FieldNotesCompanion(deletedAt: Value(DateTime.now())));
           }
         }
-
-        // 7. Save Next Cursor
-        final nextCursor = data['nextCursor']?.toString();
-        if (nextCursor != null && nextCursor.isNotEmpty) {
-          await _saveCursor(nextCursor);
-        }
       });
+      if (data['fieldNotes'] is List) {
+        for (final note in data['fieldNotes'] as List) {
+          if (note is Map && note['photoPath'] != null) {
+            await _downloadPulledPhoto(
+              note['id'].toString(),
+              note['photoPath'].toString(),
+              currentUserId,
+            );
+          }
+        }
+      }
+      if (nextCursor != null && nextCursor.isNotEmpty) {
+        await _saveCursor(nextCursor, currentUserId);
+      }
     }
   }
 
+  Future<void> _downloadPulledPhoto(
+    String noteId,
+    String storagePath,
+    String userId,
+  ) async {
+    final documents = await getApplicationDocumentsDirectory();
+    final directory = Directory(p.join(documents.path, 'photos', userId));
+    await directory.create(recursive: true);
+    final extension = p.extension(storagePath).isEmpty
+        ? '.jpg'
+        : p.extension(storagePath);
+    final target = File(p.join(directory.path, '$noteId$extension'));
+    if (!await target.exists()) {
+      final response = await dio.get<List<int>>(
+        '/api/v1/notes/$noteId/photo',
+        options: Options(responseType: ResponseType.bytes),
+      );
+      final bytes = response.data;
+      if (bytes == null || bytes.isEmpty) {
+        throw StateError(
+          'The server returned an empty photo for note $noteId.',
+        );
+      }
+      await target.writeAsBytes(bytes, flush: true);
+    }
+    await (db.update(
+          db.fieldNotes,
+        )..where((note) => note.id.equals(noteId) & note.userId.equals(userId)))
+        .write(FieldNotesCompanion(photoPath: Value(target.path)));
+  }
+
   Future<void> retryFailed() async {
-    await outboxDao.retryAllFailed();
+    final userId = await secureStorage.getUserId();
+    if (userId == null || userId.isEmpty) {
+      throw StateError('No authenticated user available for synchronization.');
+    }
+    await outboxDao.retryAllFailed(userId);
     await sync();
   }
 
-  Future<String> _getCursor() async {
+  Future<String> _getCursor(String userId) async {
     final entry = await (db.select(
       db.syncMetadata,
-    )..where((t) => t.id.equals('cursor'))).getSingleOrNull();
+    )..where((t) => t.id.equals('cursor:$userId'))).getSingleOrNull();
     return entry?.value ?? '1970-01-01T00:00:00Z';
   }
 
-  Future<void> _saveCursor(String cursor) async {
+  Future<void> _saveCursor(String cursor, String userId) async {
     await db
         .into(db.syncMetadata)
         .insertOnConflictUpdate(
-          SyncMetadataCompanion.insert(id: 'cursor', value: Value(cursor)),
+          SyncMetadataCompanion.insert(
+            id: 'cursor:$userId',
+            value: Value(cursor),
+          ),
         );
   }
 

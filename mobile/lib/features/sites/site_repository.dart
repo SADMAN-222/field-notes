@@ -7,8 +7,8 @@ class SiteRepository {
 
   SiteRepository({required this.sitesDao});
 
-  Stream<List<Site>> watchSites(String customerId) =>
-      sitesDao.watchSitesByCustomer(customerId);
+  Stream<List<Site>> watchSites(String customerId, String userId) =>
+      sitesDao.watchSitesByCustomer(customerId, userId);
 
   Stream<List<Site>> watchAllSites(String userId) =>
       sitesDao.watchAllSites(userId);
@@ -16,11 +16,11 @@ class SiteRepository {
   Future<List<Site>> getAllSites(String userId) =>
       sitesDao.getAllSites(userId);
 
-  Future<Site?> getSiteById(String id) =>
-      sitesDao.getSiteById(id);
+  Future<Site?> getSiteById(String id, String userId) =>
+      sitesDao.getSiteById(id, userId);
 
-  Stream<Site?> watchSiteById(String id) =>
-      sitesDao.watchSiteById(id);
+  Stream<Site?> watchSiteById(String id, String userId) =>
+      sitesDao.watchSiteById(id, userId);
 
   Stream<List<Site>> searchSites(String userId, String query, {String? customerId}) =>
       sitesDao.searchSites(userId, query, customerId: customerId);
@@ -28,14 +28,25 @@ class SiteRepository {
   Future<int> getSiteCount(String userId) =>
       sitesDao.getSiteCount(userId);
 
-  Future<void> addSite(Site site) {
+  Future<void> addSite(Site site, String userId) {
+    if (site.userId != userId) {
+      throw StateError('Site does not belong to the active account.');
+    }
     debugPrint('SiteRepository.addSite: ${site.userId}, ID: ${site.id}, Customer: ${site.customerId}');
     return sitesDao.createSite(site);
   }
 
-  Future<void> updateSite(Site site) =>
-      sitesDao.updateSite(site);
+  Future<void> updateSite(Site site, String userId) {
+    if (site.userId != userId) {
+      throw StateError('Site does not belong to the active account.');
+    }
+    return sitesDao.updateSite(site);
+  }
 
-  Future<void> deleteSite(Site site) =>
-      sitesDao.deleteSite(site);
+  Future<void> deleteSite(Site site, String userId) {
+    if (site.userId != userId) {
+      throw StateError('Site does not belong to the active account.');
+    }
+    return sitesDao.deleteSite(site);
+  }
 }

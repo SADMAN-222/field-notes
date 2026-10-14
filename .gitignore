@@ -23,3 +23,11 @@ mobile/android/app/build/
 *.env
 !.env.example
 !*.env.example
+*.jks
+*.keystore
+key.properties
+secrets.properties
+service-account*.json
+local.properties
+**/build/
+**/.gradle/

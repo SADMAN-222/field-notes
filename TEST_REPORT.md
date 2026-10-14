@@ -1,134 +1,92 @@
-# Field Notes Application - Test & Verification Report
+# Field Notes delivery verification
 
-This document details the test execution, verification results, architecture compliance, and known environmental characteristics for the **Field Notes** full-stack offline-first system (Flutter Mobile Client & Spring Boot REST API).
+Updated: 2026-10-14
 
----
+This report separates source-code inspection and automated test evidence from live
+environment verification. A feature is not considered live-verified merely because
+its source code exists or a unit test passes.
 
-## 1. Overview of Test Execution
+## Requirement status
 
-| Component | Framework / Tool | Command Executed | Result | Status |
-| :--- | :--- | :--- | :--- | :--- |
-| **Mobile Static Analysis** | Dart Analyzer / Flutter Lints | `flutter analyze` (in `mobile/`) | 0 issues found | **PASS** |
-| **Mobile Unit & Widget Tests** | Flutter Test, Mocktail, Drift (In-Memory SQLite) | `flutter test` (in `mobile/`) | 30 tests passed, 0 failed | **PASS** |
-| **Backend Integration & Unit Tests** | Spring Boot Test, JUnit 5, Mockito | `.\mvnw.cmd test` (in `backend/`) | 2 tests passed, 0 failed | **PASS** |
+| Requirement | Status | Evidence |
+|---|---|---|
+| Flutter static analysis | 🟢 COMPLETE & VERIFIED | `flutter analyze` completed with no issues after the account-isolation changes. |
+| Flutter automated tests | 🟢 COMPLETE & VERIFIED | `flutter test`: all 36 tests passed, including scoped CRUD/outbox and conflict-resolution coverage. |
+| Backend tests | 🟢 COMPLETE & VERIFIED | `backend\\mvnw.cmd test`: 6 tests passed against the test H2 configuration, including version-0 sync creates and photo metadata/ownership behavior. |
+| Backend package | 🟢 COMPLETE & VERIFIED | `backend\\mvnw.cmd package`: `BUILD SUCCESS`. |
+| Android debug APK build | 🟢 COMPLETE & VERIFIED | `flutter build apk --debug` completed before the clean rebuild. The subsequent `flutter clean` removed that debug artifact. |
+| Android release APK build | 🟡 BUILT; DEVELOPMENT SIGNING ONLY | `flutter build apk --release` succeeded and produced a 59.7 MB APK. The Android release variant is configured to use the debug signing key and the application ID is `com.example.field_notes_test`; this is not a production-distributable release. |
+| Local-first customer/site/note CRUD | 🟡 IMPLEMENTED BUT NOT FULLY VERIFIED | Repository tests cover in-memory create/update/delete, persistence and outbox enqueue; no emulator or restart/offline device run was possible. |
+| Dashboard local counts | 🟡 IMPLEMENTED BUT NOT FULLY VERIFIED | Account-scoped count-stream regression test passes in the 35-test Flutter suite; live UI checks are blocked by missing emulator. |
+| Note status specification | 🟡 IMPLEMENTED BUT NOT FULLY VERIFIED | UI/default/sync statuses changed to `PENDING`, `IN_PROGRESS`, `COMPLETED`, `CANCELLED`; Drift migration maps legacy `DRAFT` to `PENDING` and `SUBMITTED` to `IN_PROGRESS`. Analyzer and full mobile test suite pass; device upgrade-path test is unavailable. |
+| Offline note search by title/description/site/customer | 🟢 COMPLETE & VERIFIED | DAO uses user-scoped Drift joins; regression test covers site/customer name search. `flutter test` passed. |
+| Offline persistence and outbox recovery across process restart | 🟠 PARTIAL | File-backed Drift database and durable outbox exist; kill/restart/reconnect was not tested on a device. |
+| Push/pull and duplicate prevention after reinstall | 🟠 PARTIAL | Sync engine and pull cursor exist; no destructive reinstall/recovery run or end-to-end idempotency test was performed. |
+| Conflict handling | 🟡 COMPONENT VERIFIED; DEVICE UNVERIFIED | Backend rejects stale versions with structured HTTP 409 conflicts; the mobile outbox preserves conflicts and offers an explicit keep-local/rebase retry. Backend and sync-engine regression tests pass; no live server/device conflict flow was run. |
+| Backend user-scoped CRUD authorization | 🟡 IMPLEMENTED BUT NOT FULLY VERIFIED | Controllers/repositories query entities by authenticated user; no two-account adversarial integration test was run. |
+| Local user isolation on entity/detail/outbox paths | 🟡 COMPONENT VERIFIED; DEVICE UNVERIFIED | Repository/DAO reads, writes and outbox access are scoped to the authenticated user ID. New two-account SQLite tests verify list/detail isolation, rejected cross-account update, and separate outbox counts. Shared-device login/logout was not exercised. |
+| Supabase PostgreSQL connection and persisted rows | ⚫ BLOCKED | Production configuration is PostgreSQL-capable, but no runtime Supabase credentials are configured in this environment and no live database query was performed. |
+| Supabase JWT validation against live keys | 🟡 IMPLEMENTED BUT NOT FULLY VERIFIED | Resource-server configuration supports JWKS or JWT secret; no live token validation was performed. |
+| Secure private photo storage on Supabase | 🟡 IMPLEMENTED; LIVE STORAGE UNVERIFIED | Backend storage adapter uses a backend-only service key, verifies/provisions a private bucket, and persists per-user media metadata. Controller-level upload/download and ownership tests use mocked storage; live Supabase Storage and adapter HTTP behavior were not verified. |
+| Photo/location device flows | 🟠 PARTIAL | Source paths exist; picker/location success, denial, restart, upload, and retry were not exercised on a device. |
+| Emulator install, login and real CRUD | ⚫ BLOCKED | `adb devices -l` returned no connected devices. The latest APK built but was not installed or launched. |
+| Live two-user isolation test | ⚫ BLOCKED | Local SQLite tests cover two account IDs; authenticated account switching requires live credentials and an emulator, neither available. |
 
----
+## Executed commands and results
 
-## 2. Flutter Mobile Application Verification
+| Command | Result |
+|---|---|
+| `flutter analyze` (from `mobile`) | PASS — no issues found. |
+| `flutter test` (from `mobile`) | PASS — all 36 tests passed, including account-scoped CRUD/outbox and explicit conflict retry coverage. |
+| `backend\\mvnw.cmd test` (from `backend`) | PASS — 6 tests, 0 failures/errors. Test datasource uses H2; this is not a Supabase integration test. |
+| `backend\\mvnw.cmd package` (from `backend`) | PASS — `BUILD SUCCESS`. |
+| `flutter build apk --debug` (from `mobile`, before the later clean rebuild) | PASS — APK generated; `flutter clean` subsequently removed it. |
+| `flutter build apk --release` (from `mobile`) | PASS — 59.7 MB APK generated. Kotlin incremental compilation is disabled to avoid cross-volume cache failures, and Gradle heap is capped at 3 GB for this 8 GB host. The output is debug-signed and is not suitable as a production release. |
+| `adb devices -l` | BLOCKED — no Android device/emulator listed; manual UI verification could not be performed. |
+| Live Supabase/PostgreSQL queries | BLOCKED — no datasource/JWT environment configuration was available. No secrets were read or printed. |
 
-### 2.1 Static Analysis
-- **Command:** `flutter analyze`
-- **Working Directory:** `mobile/`
-- **Output:**
-  ```text
-  Analyzing mobile...
-  No issues found! (ran in 5.9s)
-  ```
-- **Result:** 0 errors, 0 warnings, 0 lints.
+## Important verified code observations
 
-### 2.2 Automated Test Suites (`flutter test`)
-- **Total Tests Passed:** 30
-- **Total Tests Failed:** 0
-- **Execution Time:** ~4.0 seconds
+- Backend production properties select the PostgreSQL driver and use Flyway with
+  Hibernate schema validation. Test properties instead explicitly select H2 and
+  disable Flyway. A successful test/package therefore does not prove a Supabase
+  connection or production migration.
+- The migration defines user ownership foreign keys for customers, sites and notes.
+- Backend entity routes and sync controller derive ownership from the authenticated
+  principal; related site/customer references are checked against that user during
+  sync push.
+- Sync push removes local outbox entries after an HTTP success. It retains failed
+  entries. Stale versions are preflighted and returned as HTTP 409 before batch
+  mutation; client conflicts remain in the outbox until explicit user resolution.
+  These behaviors are covered by tests, but not proven against a live deployment.
+- Client-assigned UUID entities created at version 0 are inserted as new JPA
+  entities by letting `@Version` initialize on persist. An integration regression
+  test covers customer, site and field-note creation plus identical replay.
+- The app's local database survives ordinary app restarts, but is intentionally not
+  a substitute for restoring data after uninstall. Restore depends on verified
+  server push/pull and has not been tested here.
+- Sign-out now clears the signed-in user's local rows, outbox entries and app-owned
+  photo files only after the pending-change confirmation/sync flow. This cleanup
+  path has not been exercised on a device.
+- Entity/detail reads, writes and outbox queries are scoped by user ID. The new
+  in-memory Drift regression test proves local account separation, but does not
+  substitute for authenticated account-switch testing against Supabase.
 
-#### Suite A: `auth_cubit_test.dart` (9 Tests)
-- `AuthCubit initial state is AuthInitial`: **PASS**
-- `AuthCubit checkAuth emits [AuthLoading, AuthAuthenticated] when logged in`: **PASS**
-- `AuthCubit checkAuth emits [AuthLoading, AuthUnauthenticated] when not logged in`: **PASS**
-- `AuthCubit checkAuth emits [AuthLoading, AuthUnauthenticated] on repository exception`: **PASS**
-- `AuthCubit login emits [AuthLoading, AuthAuthenticated] on success`: **PASS**
-- `AuthCubit login emits [AuthLoading, AuthError, AuthUnauthenticated] on failure`: **PASS**
-- `AuthCubit register emits [AuthLoading, AuthAuthenticated] on registration and auto-login success`: **PASS**
-- `AuthCubit register emits [AuthLoading, AuthError, AuthUnauthenticated] on registration failure`: **PASS**
-- `AuthCubit logout emits [AuthLoading, AuthUnauthenticated]`: **PASS**
+## Delivery blockers
 
-#### Suite B: `database_repository_test.dart` (13 Tests)
-Verifies in-memory SQLite (Drift) as the local source of truth and durable outbox queueing:
-- `CustomerDao & CustomerRepository addCustomer persists customer and enqueues CREATE outbox entry`: **PASS**
-- `CustomerDao & CustomerRepository updateCustomer updates database record and enqueues UPDATE outbox entry`: **PASS**
-- `CustomerDao & CustomerRepository deleteCustomer sets deletedAt and enqueues DELETE outbox entry`: **PASS**
-- `CustomerDao & CustomerRepository searchCustomers filters by name or contact`: **PASS**
-- `SitesDao & SiteRepository addSite persists site and creates CREATE outbox item`: **PASS**
-- `SitesDao & SiteRepository updateSite modifies site and records UPDATE outbox item`: **PASS**
-- `SitesDao & SiteRepository deleteSite soft-deletes and enqueues DELETE outbox item`: **PASS**
-- `SitesDao & SiteRepository searchSites finds matches by name or address`: **PASS**
-- `FieldNotesDao & FieldNoteRepository addNote saves note and creates CREATE outbox item`: **PASS**
-- `FieldNotesDao & FieldNoteRepository updateNote updates field note and adds UPDATE outbox item`: **PASS**
-- `FieldNotesDao & FieldNoteRepository deleteNote soft-deletes and adds DELETE outbox item`: **PASS**
-- `FieldNotesDao & FieldNoteRepository watchAllNotes supports filtering by status and query`: **PASS**
-- `OutboxDao State Transitions markFailed, retryAllFailed, and removeEntries behavior`: **PASS**
+1. Configure a non-production Supabase project and verify authenticated PostgreSQL,
+   JWT, private Storage, ownership, migrations, sync acknowledgement, and recovery.
+2. Connect `emulator-5554` (or another Android device) and run online/offline CRUD,
+   process restart, reconnect, conflict resolution, photo/location, logout and
+   account-isolation workflows.
+3. Configure an application-owned Android package ID and production signing key
+   before treating the current release APK as a production release. The repository's
+   current Android release build type uses the debug signing configuration.
 
-#### Suite C: `sync_engine_test.dart` (4 Tests)
-Verifies offline outbox pushing, delta pull merging, and authorization handling:
-- `SyncEngine sync skips gracefully when user has no access token`: **PASS**
-- `SyncEngine push gathers outbox entries, sends to /api/v1/sync/push, and cleans up outbox on 200`: **PASS**
-- `SyncEngine push marks entries as FAILED if server returns 500 error`: **PASS**
-- `SyncEngine pull fetches server items and writes to local SQLite database`: **PASS**
+## Final assessment
 
-#### Suite D: `widget_test.dart` (4 Tests)
-Verifies Material 3 design tokens, responsive cards, and component states:
-- `App theme uses Material 3 and brand colors`: **PASS**
-- `EmptyStateView renders icon, title, message, and executes action`: **PASS**
-- `StatusBadge renders appropriate label and colors`: **PASS**
-- `AppCard renders child and triggers onTap callback`: **PASS**
-
----
-
-## 3. Backend Verification
-
-### 3.1 Spring Boot REST API Tests
-- **Command:** `.\mvnw.cmd test`
-- **Working Directory:** `backend/`
-- **Results:**
-  ```text
-  [INFO] Running com.fieldnotes.backend.controller.AuthControllerTest
-  [INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0 -- in com.fieldnotes.backend.controller.AuthControllerTest
-  [INFO] Running com.fieldnotes.FieldNotesBackendApplicationTests
-  [INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0 -- in com.fieldnotes.FieldNotesBackendApplicationTests
-  [INFO] BUILD SUCCESS
-  [INFO] Total time: 19.801 s
-  ```
-
----
-
-## 4. Architectural & Screen Verification Summary
-
-All 20 required functional screens and operational workflows are fully built and wired:
-
-1. **Splash Screen (`/splash`)**: Auth check, session restoration, auto-redirect.
-2. **Login Screen (`/login`)**: Email/password authentication, validation, error snackbar.
-3. **Registration Screen (`/register`)**: New account creation with immediate auto-login.
-4. **Dashboard Screen (`/dashboard`)**: Metric cards (Customers, Sites, Notes, Pending Sync), quick actions, recent notes list.
-5. **Customers List (`/customers`)**: Live search, responsive card layout, creation shortcut, swipe-to-refresh.
-6. **Customer Form (`/customers/new`, `/customers/:id/edit`)**: Name and contact fields, validation, offline transactional save + outbox enqueue.
-7. **Customer Details (`/customers/:id`)**: Customer info, associated sites listing, quick site creation.
-8. **Sites List (`/sites`)**: Customer filter, search bar, address display, note count indicator.
-9. **Site Form (`/sites/new`, `/sites/:id/edit`)**: Customer selector dropdown, site name, address validation.
-10. **Site Details (`/sites/:id`)**: Site overview, associated field notes stream, quick note creation.
-11. **Field Notes List (`/notes`)**: Multi-status filtering chips (All, Draft, Submitted, Completed, Flagged), search query, thumbnail preview, GPS coordinates display.
-12. **Field Note Form (`/notes/new`, `/notes/:id/edit`)**: Site selection, title/description, status dropdown, camera/gallery image picker, GPS geolocation capture via `Geolocator`.
-13. **Field Note Details (`/notes/:id`)**: Full note metadata, interactive photo preview thumbnail with tap-to-expand, coordinates with Google Maps redirect link, delete confirmation modal.
-14. **Global Search (`/search`)**: Unified tabbed search across customers, sites, and notes.
-15. **Filters**: Integrated across lists and search with category chips and status selectors.
-16. **Photo Attachment**: Local storage caching, best-effort multipart sync upload to `/api/v1/notes/:id/photo`.
-17. **Location Capture**: Live device GPS coordinate acquisition (`lat`, `lng`) with accuracy handling.
-18. **Synchronization Status (`/sync`)**: Pending outbox count indicator, sync history, trigger manual sync button, retry failed entries button, error logs display.
-19. **Settings (`/settings`)**: Base API URL configuration, auto-sync toggle, periodic sync interval slider, cache clear.
-20. **Logout/Session Handling**: Secure token erasure (`FlutterSecureStorage`), preferences wipe, and database reset.
-
----
-
-## 5. Security & Offline-First Guarantees
-
-- **No Plaintext Passwords**: Passwords are never stored on device.
-- **Secure Storage**: JWT access and refresh tokens stored in hardware-backed `FlutterSecureStorage`.
-- **Offline Data Isolation**: SQLite tables partitioned with user IDs; queries enforce `userId` match and `deletedAt.isNull()`.
-- **Durable Local Outbox**: Every local mutation (`Customer`, `Site`, `FieldNote`) is executed inside a SQLite transaction that writes an outbox record with the exact entity JSON payload, operation type (`CREATE`, `UPDATE`, `DELETE`), and expected version for conflict resolution.
-- **Automatic Recovery**: On connectivity restoration or manual trigger, `SyncEngine` drains the pending outbox, submits to `/api/v1/sync/push`, handles multipart photos, pulls server delta changes via `/api/v1/sync/pull`, and updates timestamps atomically.
-
----
-
-## 6. Known Environmental Limitations
-
-- **Headless CLI Execution**: Flutter UI rendering was verified through Flutter widget tests (`testWidgets`), static analysis (`flutter analyze`), and unit tests. Physical device/emulator GPU display verification cannot be executed in this headless CI/sandbox terminal environment without an attached Android device or running emulator daemon.
-
+**NOT LIVE-VERIFIED** — automated analysis/tests/package builds pass, and component
+conflict handling plus private-photo controller behavior are implemented. Live
+Supabase/PostgreSQL/Storage and emulator execution remain unavailable, so no
+production-ready claim is made. The Android release variant currently uses a
+debug key and must not be distributed as a production-signed release.

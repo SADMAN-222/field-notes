@@ -1,25 +1,23 @@
 package com.fieldnotes.backend.controller;
 
 import com.fieldnotes.backend.entity.FieldNote;
+import com.fieldnotes.backend.entity.MediaMetadata;
 import com.fieldnotes.backend.entity.User;
 import com.fieldnotes.backend.repository.FieldNoteRepository;
+import com.fieldnotes.backend.repository.MediaMetadataRepository;
 import com.fieldnotes.backend.repository.SiteRepository;
 import com.fieldnotes.backend.service.AuthenticatedUserService;
+import com.fieldnotes.backend.service.PrivateMediaStorage;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
-import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
@@ -37,8 +35,11 @@ public class FieldNoteController {
     @Autowired
     private AuthenticatedUserService authenticatedUserService;
 
-    @Value("${upload.dir:uploads}")
-    private String uploadDir;
+    @Autowired
+    private MediaMetadataRepository mediaMetadataRepository;
+
+    @Autowired
+    private PrivateMediaStorage privateMediaStorage;
 
     @GetMapping
     public List<FieldNote> getAll() {
@@ -91,43 +92,62 @@ public class FieldNoteController {
     }
 
     @PostMapping("/{id}/photo")
-    public ResponseEntity<String> uploadPhoto(@PathVariable UUID id, @RequestParam("file") MultipartFile file) {
-        return fieldNoteRepository.findByIdAndUserId(id, authenticatedUserService.getCurrentUserId()).map(note -> {
-            try {
-                Path uploadPath = Paths.get(uploadDir);
-                if (!Files.exists(uploadPath)) {
-                    Files.createDirectories(uploadPath);
-                }
-                String filename = id.toString() + "_" + file.getOriginalFilename();
-                Path filePath = uploadPath.resolve(filename);
-                Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
+    @Transactional
+    public ResponseEntity<Void> uploadPhoto(
+        @PathVariable UUID id,
+        @RequestParam("file") MultipartFile file
+    ) {
+        UUID userId = authenticatedUserService.getCurrentUserId();
+        FieldNote note = fieldNoteRepository.findByIdAndUserId(id, userId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        if (file.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Photo file is empty.");
 
-                note.setPhotoPath(filename);
-                fieldNoteRepository.save(note);
-                return ResponseEntity.ok("File uploaded successfully: " + filename);
-            } catch (IOException e) {
-                return ResponseEntity.internalServerError().body("Could not upload the file: " + e.getMessage());
-            }
-        }).orElse(ResponseEntity.notFound().build());
+        User user = authenticatedUserService.getCurrentUser();
+        String originalName = file.getOriginalFilename() == null ? "photo" : file.getOriginalFilename();
+        String safeName = java.nio.file.Paths.get(originalName).getFileName().toString();
+        String extension = safeName.lastIndexOf('.') >= 0 ? safeName.substring(safeName.lastIndexOf('.')) : "";
+        String storagePath = userId + "/" + id + "/" + UUID.randomUUID() + extension;
+        String contentType = file.getContentType() == null ? MediaType.APPLICATION_OCTET_STREAM_VALUE : file.getContentType();
+        try {
+            privateMediaStorage.upload(storagePath, contentType, file.getBytes());
+        } catch (IOException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Could not read uploaded photo.");
+        }
+
+        note.setPhotoPath(storagePath);
+        fieldNoteRepository.save(note);
+        MediaMetadata metadata = new MediaMetadata();
+        metadata.setId(UUID.randomUUID());
+        metadata.setUser(user);
+        metadata.setFieldNote(note);
+        metadata.setStoragePath(storagePath);
+        metadata.setFileName(safeName);
+        metadata.setMimeType(contentType);
+        metadata.setFileSize(file.getSize());
+        metadata.setCreatedAt(OffsetDateTime.now());
+        mediaMetadataRepository.save(metadata);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/{id}/photo")
-    public ResponseEntity<Resource> getPhoto(@PathVariable UUID id) {
-        return fieldNoteRepository.findByIdAndUserId(id, authenticatedUserService.getCurrentUserId()).<ResponseEntity<Resource>>map(note -> {
+    public ResponseEntity<byte[]> getPhoto(@PathVariable UUID id) {
+        UUID userId = authenticatedUserService.getCurrentUserId();
+        FieldNote note = fieldNoteRepository.findByIdAndUserId(id, userId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        MediaMetadata metadata = mediaMetadataRepository
+            .findFirstByFieldNoteIdAndUserIdOrderByCreatedAtDesc(id, userId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+        byte[] content = privateMediaStorage.download(metadata.getStoragePath());
+        MediaType mediaType = MediaType.APPLICATION_OCTET_STREAM;
+        if (metadata.getMimeType() != null) {
             try {
-                if (note.getPhotoPath() == null) return ResponseEntity.notFound().build();
-                Path filePath = Paths.get(uploadDir).resolve(note.getPhotoPath()).normalize();
-                Resource resource = new UrlResource(filePath.toUri());
-                if (resource.exists()) {
-                    return ResponseEntity.ok()
-                            .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + resource.getFilename() + "\"")
-                            .body(resource);
-                } else {
-                    return ResponseEntity.notFound().build();
-                }
-            } catch (MalformedURLException e) {
-                return ResponseEntity.status(500).build();
+                mediaType = MediaType.parseMediaType(metadata.getMimeType());
+            } catch (IllegalArgumentException ignored) {
+                mediaType = MediaType.APPLICATION_OCTET_STREAM;
             }
-        }).orElse(ResponseEntity.notFound().build());
+        }
+        return ResponseEntity.ok()
+            .contentType(mediaType)
+            .body(content);
     }
 }

@@ -28,8 +28,8 @@ class _NotesScreenState extends State<NotesScreen> {
 
   final List<String> _statusFilters = [
     'ALL',
-    'DRAFT',
-    'SUBMITTED',
+    'PENDING',
+    'IN_PROGRESS',
     'COMPLETED',
     'CANCELLED',
   ];
@@ -241,6 +241,7 @@ class _NotesScreenState extends State<NotesScreen> {
                                       FutureBuilder<Site?>(
                                         future: sitesDao.getSiteById(
                                           note.siteId,
+                                          userId,
                                         ),
                                         builder: (context, siteSnap) {
                                           final siteName =

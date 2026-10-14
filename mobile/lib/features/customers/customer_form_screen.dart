@@ -44,8 +44,12 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       _loadError = null;
     });
     try {
+      final userId = context.read<AuthCubit>().currentUserId;
+      if (userId == null || userId.isEmpty) {
+        throw StateError('No active user session.');
+      }
       final repo = di.sl<CustomerRepository>();
-      final customer = await repo.getCustomerById(widget.customerId!);
+      final customer = await repo.getCustomerById(widget.customerId!, userId);
       if (!mounted) return;
       if (customer != null) {
         _existingCustomer = customer;
@@ -91,7 +95,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
           updatedAt: DateTime.now().toUtc(),
           version: _existingCustomer!.version + 1,
         );
-        await repo.updateCustomer(updated);
+        await repo.updateCustomer(updated, userId);
       } else {
         final newCustomer = Customer(
           id: const Uuid().v4(),
@@ -104,7 +108,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
           updatedAt: DateTime.now().toUtc(),
           version: 0,
         );
-        await repo.addCustomer(newCustomer);
+        await repo.addCustomer(newCustomer, userId);
       }
 
       if (mounted) {

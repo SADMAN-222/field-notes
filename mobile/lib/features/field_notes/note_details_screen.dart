@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/config/injection.dart' as di;
 import '../../core/database/database.dart';
@@ -8,6 +9,7 @@ import '../../core/database/daos/sites_dao.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/common_widgets.dart';
 import '../../core/widgets/sync_indicator.dart';
+import '../authentication/auth_cubit.dart';
 import 'field_note_repository.dart';
 
 class NoteDetailsScreen extends StatelessWidget {
@@ -20,9 +22,10 @@ class NoteDetailsScreen extends StatelessWidget {
     final noteRepo = di.sl<FieldNoteRepository>();
     final sitesDao = di.sl<SitesDao>();
     final customerDao = di.sl<CustomerDao>();
+    final userId = context.watch<AuthCubit>().currentUserId ?? '';
 
     return StreamBuilder<FieldNote?>(
-      stream: noteRepo.watchNoteById(noteId),
+      stream: noteRepo.watchNoteById(noteId, userId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
@@ -75,7 +78,8 @@ class NoteDetailsScreen extends StatelessWidget {
                   color: AppColors.syncError,
                 ),
                 tooltip: 'Delete Note',
-                onPressed: () => _confirmDelete(context, note, noteRepo),
+                onPressed: () =>
+                    _confirmDelete(context, note, noteRepo, userId),
               ),
             ],
           ),
@@ -121,7 +125,7 @@ class NoteDetailsScreen extends StatelessWidget {
 
                       // Associated Site & Customer
                       FutureBuilder<Site?>(
-                        future: sitesDao.getSiteById(note.siteId),
+                        future: sitesDao.getSiteById(note.siteId, userId),
                         builder: (context, siteSnap) {
                           final site = siteSnap.data;
                           if (site == null) return const SizedBox.shrink();
@@ -155,6 +159,7 @@ class NoteDetailsScreen extends StatelessWidget {
                               FutureBuilder<Customer?>(
                                 future: customerDao.getCustomerById(
                                   site.customerId,
+                                  userId,
                                 ),
                                 builder: (context, custSnap) {
                                   final customer = custSnap.data;
@@ -372,6 +377,7 @@ class NoteDetailsScreen extends StatelessWidget {
     BuildContext context,
     FieldNote note,
     FieldNoteRepository repo,
+    String userId,
   ) {
     showDialog(
       context: context,
@@ -390,7 +396,7 @@ class NoteDetailsScreen extends StatelessWidget {
             onPressed: () async {
               Navigator.of(ctx).pop();
               try {
-                await repo.deleteNote(note);
+                await repo.deleteNote(note, userId);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(

@@ -9,16 +9,26 @@ part 'sites_dao.g.dart';
 class SitesDao extends DatabaseAccessor<AppDatabase> with _$SitesDaoMixin {
   SitesDao(super.db);
 
-  Stream<List<Site>> watchSitesByCustomer(String customerId) {
+  Stream<List<Site>> watchSitesByCustomer(String customerId, String userId) {
     return (select(sites)
-          ..where((tbl) => tbl.customerId.equals(customerId) & tbl.deletedAt.isNull())
+          ..where(
+            (tbl) =>
+                tbl.customerId.equals(customerId) &
+                tbl.userId.equals(userId) &
+                tbl.deletedAt.isNull(),
+          )
           ..orderBy([(t) => OrderingTerm.asc(t.siteName)]))
         .watch();
   }
 
-  Future<List<Site>> getSitesByCustomer(String customerId) {
+  Future<List<Site>> getSitesByCustomer(String customerId, String userId) {
     return (select(sites)
-          ..where((tbl) => tbl.customerId.equals(customerId) & tbl.deletedAt.isNull())
+          ..where(
+            (tbl) =>
+                tbl.customerId.equals(customerId) &
+                tbl.userId.equals(userId) &
+                tbl.deletedAt.isNull(),
+          )
           ..orderBy([(t) => OrderingTerm.asc(t.siteName)]))
         .get();
   }
@@ -37,12 +47,16 @@ class SitesDao extends DatabaseAccessor<AppDatabase> with _$SitesDaoMixin {
         .get();
   }
 
-  Future<Site?> getSiteById(String id) {
-    return (select(sites)..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+  Future<Site?> getSiteById(String id, String userId) {
+    return (select(sites)
+          ..where((tbl) => tbl.id.equals(id) & tbl.userId.equals(userId)))
+        .getSingleOrNull();
   }
 
-  Stream<Site?> watchSiteById(String id) {
-    return (select(sites)..where((tbl) => tbl.id.equals(id))).watchSingleOrNull();
+  Stream<Site?> watchSiteById(String id, String userId) {
+    return (select(sites)
+          ..where((tbl) => tbl.id.equals(id) & tbl.userId.equals(userId)))
+        .watchSingleOrNull();
   }
 
   Stream<List<Site>> searchSites(String userId, String query, {String? customerId}) {
@@ -106,7 +120,14 @@ class SitesDao extends DatabaseAccessor<AppDatabase> with _$SitesDaoMixin {
 
   Future<void> updateSite(Site site) {
     return transaction(() async {
-      await update(sites).replace(site);
+      final updated = await (update(sites)
+            ..where(
+              (tbl) => tbl.id.equals(site.id) & tbl.userId.equals(site.userId),
+            ))
+          .write(site.toCompanion(true));
+      if (updated != 1) {
+        throw StateError('Site does not belong to the active account.');
+      }
       final payload = jsonEncode({
         'id': site.id,
         'userId': site.userId,
@@ -133,7 +154,14 @@ class SitesDao extends DatabaseAccessor<AppDatabase> with _$SitesDaoMixin {
   Future<void> deleteSite(Site site) {
     return transaction(() async {
       final deletedSite = site.copyWith(deletedAt: Value(DateTime.now()));
-      await update(sites).replace(deletedSite);
+      final updated = await (update(sites)
+            ..where(
+              (tbl) => tbl.id.equals(site.id) & tbl.userId.equals(site.userId),
+            ))
+          .write(SitesCompanion(deletedAt: Value(deletedSite.deletedAt)));
+      if (updated != 1) {
+        throw StateError('Site does not belong to the active account.');
+      }
 
       final payload = jsonEncode({
         'id': site.id,
@@ -162,8 +190,9 @@ class SitesDao extends DatabaseAccessor<AppDatabase> with _$SitesDaoMixin {
     await into(sites).insertOnConflictUpdate(site);
   }
 
-  Future<void> deleteFromServer(String siteId) async {
-    await (update(sites)..where((t) => t.id.equals(siteId)))
+  Future<void> deleteFromServer(String siteId, String userId) async {
+    await (update(sites)
+          ..where((t) => t.id.equals(siteId) & t.userId.equals(userId)))
         .write(SitesCompanion(deletedAt: Value(DateTime.now())));
   }
 }

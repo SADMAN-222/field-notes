@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/config/injection.dart' as di;
 import '../../core/database/database.dart';
@@ -7,6 +8,7 @@ import '../../core/database/daos/field_notes_dao.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/widgets/common_widgets.dart';
 import '../../core/widgets/sync_indicator.dart';
+import '../authentication/auth_cubit.dart';
 import 'site_repository.dart';
 
 class SiteDetailsScreen extends StatelessWidget {
@@ -19,9 +21,10 @@ class SiteDetailsScreen extends StatelessWidget {
     final siteRepo = di.sl<SiteRepository>();
     final customerDao = di.sl<CustomerDao>();
     final fieldNotesDao = di.sl<FieldNotesDao>();
+    final userId = context.watch<AuthCubit>().currentUserId ?? '';
 
     return StreamBuilder<Site?>(
-      stream: siteRepo.watchSiteById(siteId),
+      stream: siteRepo.watchSiteById(siteId, userId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Scaffold(
@@ -72,7 +75,8 @@ class SiteDetailsScreen extends StatelessWidget {
                   color: AppColors.syncError,
                 ),
                 tooltip: 'Delete Site',
-                onPressed: () => _confirmDelete(context, site, siteRepo),
+                onPressed: () =>
+                    _confirmDelete(context, site, siteRepo, userId),
               ),
             ],
           ),
@@ -121,6 +125,7 @@ class SiteDetailsScreen extends StatelessWidget {
                                 FutureBuilder<Customer?>(
                                   future: customerDao.getCustomerById(
                                     site.customerId,
+                                    userId,
                                   ),
                                   builder: (context, custSnap) {
                                     final customer = custSnap.data;
@@ -218,7 +223,7 @@ class SiteDetailsScreen extends StatelessWidget {
 
                 // Notes Stream
                 StreamBuilder<List<FieldNote>>(
-                  stream: fieldNotesDao.watchNotesBySite(site.id),
+                  stream: fieldNotesDao.watchNotesBySite(site.id, userId),
                   builder: (context, noteSnapshot) {
                     if (noteSnapshot.connectionState ==
                         ConnectionState.waiting) {
@@ -358,7 +363,12 @@ class SiteDetailsScreen extends StatelessWidget {
     );
   }
 
-  void _confirmDelete(BuildContext context, Site site, SiteRepository repo) {
+  void _confirmDelete(
+    BuildContext context,
+    Site site,
+    SiteRepository repo,
+    String userId,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -376,7 +386,7 @@ class SiteDetailsScreen extends StatelessWidget {
             onPressed: () async {
               Navigator.of(ctx).pop();
               try {
-                await repo.deleteSite(site);
+                await repo.deleteSite(site, userId);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(

@@ -187,7 +187,7 @@ class DashboardScreen extends StatelessWidget {
               ),
 
               const SizedBox(height: 10),
-              _buildSyncSummary(outboxDao),
+              _buildSyncSummary(outboxDao, userId),
 
               const SizedBox(height: 20),
 
@@ -495,12 +495,12 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSyncSummary(OutboxDao outboxDao) {
+  Widget _buildSyncSummary(OutboxDao outboxDao, String userId) {
     return StreamBuilder<int>(
-      stream: outboxDao.watchPendingCount(),
+      stream: outboxDao.watchPendingCount(userId),
       builder: (context, pendingSnapshot) {
         return StreamBuilder<int>(
-          stream: outboxDao.watchFailedCount(),
+          stream: outboxDao.watchFailedCount(userId),
           builder: (context, failedSnapshot) {
             final hasError =
                 pendingSnapshot.hasError || failedSnapshot.hasError;

@@ -28,7 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late final TextEditingController _baseUrlController;
   bool _autoSync = true;
   int _syncInterval = 30;
-  String _defaultStatus = 'DRAFT';
+  String _defaultStatus = 'PENDING';
   bool _isTestingConnection = false;
   bool? _serverConnected;
   String? _connectionMessage;
@@ -151,7 +151,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _handleLogout() async {
     final outboxDao = di.sl<OutboxDao>();
-    final queuedEntries = await _readOutboxEntries(outboxDao);
+    final userId = context.read<AuthCubit>().currentUserId;
+    if (userId == null || userId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No active user session.')),
+      );
+      return;
+    }
+    final queuedEntries = await _readOutboxEntries(outboxDao, userId);
     if (queuedEntries == null) return;
     if (!mounted) return;
 
@@ -192,7 +199,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return;
       }
       if (!mounted) return;
-      final remaining = await _readOutboxEntries(outboxDao);
+      final remaining = await _readOutboxEntries(outboxDao, userId);
       if (!mounted) return;
       if (remaining == null) return;
       if (remaining.isNotEmpty) {
@@ -214,7 +221,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         context: context,
         builder: (dialogContext) => AlertDialog(
           title: const Text('Sign out of your account?'),
-          content: const Text('Your local data will remain on this device.'),
+          content: const Text(
+            'Your synced data remains in your account. Local cached data and photos will be removed from this device.',
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -231,13 +240,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     if (!mounted) return;
-    await context.read<AuthCubit>().logout();
+    final authCubit = context.read<AuthCubit>();
+    try {
+      await di.sl<AppDatabase>().clearAccountData(userId);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not clear local account data: $error')),
+        );
+      }
+      return;
+    }
+    await authCubit.logout();
     if (mounted) context.go('/login');
   }
 
-  Future<List<SyncOutboxEntry>?> _readOutboxEntries(OutboxDao outboxDao) async {
+  Future<List<SyncOutboxEntry>?> _readOutboxEntries(
+    OutboxDao outboxDao,
+    String userId,
+  ) async {
     try {
-      return await outboxDao.watchAllOutbox().first;
+      return await outboxDao.watchAllOutbox(userId).first;
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -303,9 +326,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       title: 'Default note status',
       currentValue: _defaultStatus,
       options: const [
-        ('DRAFT', 'Draft'),
-        ('SUBMITTED', 'Submitted'),
+        ('PENDING', 'Pending'),
+        ('IN_PROGRESS', 'In progress'),
         ('COMPLETED', 'Completed'),
+        ('CANCELLED', 'Cancelled'),
       ],
     );
     if (selected == null) return;
@@ -484,7 +508,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 count: fieldNotesDao.getNotesCount(userId),
               ),
               StreamBuilder<List<dynamic>>(
-                stream: outboxDao.watchAllOutbox(),
+                stream: outboxDao.watchAllOutbox(
+                  context.watch<AuthCubit>().currentUserId ?? '',
+                ),
                 builder: (context, snapshot) {
                   final count = snapshot.data?.length ?? 0;
                   return _StatRow(
@@ -947,7 +973,9 @@ class _SyncStatusRow extends StatelessWidget {
           initialData: syncEngine.isSyncing,
           builder: (context, syncingSnapshot) {
             return StreamBuilder<List<dynamic>>(
-              stream: outboxDao.watchAllOutbox(),
+              stream: outboxDao.watchAllOutbox(
+                context.watch<AuthCubit>().currentUserId ?? '',
+              ),
               builder: (context, outboxSnapshot) {
                 final syncing = syncingSnapshot.data ?? false;
                 final pendingCount = outboxSnapshot.data?.length ?? 0;

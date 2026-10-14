@@ -10,9 +10,14 @@ class FieldNotesDao extends DatabaseAccessor<AppDatabase>
     with _$FieldNotesDaoMixin {
   FieldNotesDao(super.db);
 
-  Stream<List<FieldNote>> watchNotesBySite(String siteId) {
+  Stream<List<FieldNote>> watchNotesBySite(String siteId, String userId) {
     return (select(fieldNotes)
-          ..where((tbl) => tbl.siteId.equals(siteId) & tbl.deletedAt.isNull())
+          ..where(
+            (tbl) =>
+                tbl.siteId.equals(siteId) &
+                tbl.userId.equals(userId) &
+                tbl.deletedAt.isNull(),
+          )
           ..orderBy([(t) => OrderingTerm.desc(t.recordedAt)]))
         .watch();
   }
@@ -23,26 +28,42 @@ class FieldNotesDao extends DatabaseAccessor<AppDatabase>
     String? query,
     String? siteId,
   }) {
-    return (select(fieldNotes)
-          ..where((tbl) {
-            var expr = tbl.userId.equals(userId) & tbl.deletedAt.isNull();
-            if (siteId != null && siteId.isNotEmpty) {
-              expr = expr & tbl.siteId.equals(siteId);
-            }
-            if (status != null && status.isNotEmpty && status != 'ALL') {
-              expr = expr & tbl.status.equals(status);
-            }
-            if (query != null && query.trim().isNotEmpty) {
-              final lowerQuery = '%${query.toLowerCase()}%';
-              expr =
-                  expr &
-                  (tbl.title.lower().like(lowerQuery) |
-                      tbl.description.lower().like(lowerQuery));
-            }
-            return expr;
-          })
-          ..orderBy([(t) => OrderingTerm.desc(t.recordedAt)]))
-        .watch();
+    final statement = select(fieldNotes).join([
+      innerJoin(db.sites, db.sites.id.equalsExp(fieldNotes.siteId)),
+      innerJoin(
+        db.customers,
+        db.customers.id.equalsExp(db.sites.customerId),
+      ),
+    ]);
+    statement.where(
+      fieldNotes.userId.equals(userId) &
+          fieldNotes.deletedAt.isNull() &
+          db.sites.userId.equals(userId) &
+          db.sites.deletedAt.isNull() &
+          db.customers.userId.equals(userId) &
+          db.customers.deletedAt.isNull(),
+    );
+    if (siteId != null && siteId.isNotEmpty) {
+      statement.where(fieldNotes.siteId.equals(siteId));
+    }
+    if (status != null && status.isNotEmpty && status != 'ALL') {
+      statement.where(fieldNotes.status.equals(status));
+    }
+    if (query != null && query.trim().isNotEmpty) {
+      final lowerQuery = '%${query.trim().toLowerCase()}%';
+      statement.where(
+        fieldNotes.title.lower().like(lowerQuery) |
+            fieldNotes.description.lower().like(lowerQuery) |
+            db.sites.siteName.lower().like(lowerQuery) |
+            db.sites.address.lower().like(lowerQuery) |
+            db.customers.name.lower().like(lowerQuery) |
+            db.customers.contactInformation.lower().like(lowerQuery),
+      );
+    }
+    statement.orderBy([OrderingTerm.desc(fieldNotes.recordedAt)]);
+    return statement.watch().map(
+      (rows) => rows.map((row) => row.readTable(fieldNotes)).toList(),
+    );
   }
 
   Stream<List<FieldNote>> watchRecentNotes(String userId, {int limit = 5}) {
@@ -53,16 +74,18 @@ class FieldNotesDao extends DatabaseAccessor<AppDatabase>
         .watch();
   }
 
-  Future<FieldNote?> getNoteById(String id) {
+  Future<FieldNote?> getNoteById(String id, String userId) {
     return (select(
       fieldNotes,
-    )..where((tbl) => tbl.id.equals(id))).getSingleOrNull();
+    )..where((tbl) => tbl.id.equals(id) & tbl.userId.equals(userId)))
+        .getSingleOrNull();
   }
 
-  Stream<FieldNote?> watchNoteById(String id) {
+  Stream<FieldNote?> watchNoteById(String id, String userId) {
     return (select(
       fieldNotes,
-    )..where((tbl) => tbl.id.equals(id))).watchSingleOrNull();
+    )..where((tbl) => tbl.id.equals(id) & tbl.userId.equals(userId)))
+        .watchSingleOrNull();
   }
 
   Future<int> getNotesCount(String userId, {String? status}) async {
@@ -123,7 +146,15 @@ class FieldNotesDao extends DatabaseAccessor<AppDatabase>
 
   Future<void> updateNote(FieldNote note) {
     return transaction(() async {
-      await update(fieldNotes).replace(note);
+      final updated = await (update(fieldNotes)
+            ..where(
+              (tbl) =>
+                  tbl.id.equals(note.id) & tbl.userId.equals(note.userId),
+            ))
+          .write(note.toCompanion(true));
+      if (updated != 1) {
+        throw StateError('Field note does not belong to the active account.');
+      }
       final payload = jsonEncode({
         'id': note.id,
         'userId': note.userId,
@@ -158,7 +189,15 @@ class FieldNotesDao extends DatabaseAccessor<AppDatabase>
   Future<void> deleteNote(FieldNote note) {
     return transaction(() async {
       final deletedNote = note.copyWith(deletedAt: Value(DateTime.now()));
-      await update(fieldNotes).replace(deletedNote);
+      final updated = await (update(fieldNotes)
+            ..where(
+              (tbl) =>
+                  tbl.id.equals(note.id) & tbl.userId.equals(note.userId),
+            ))
+          .write(FieldNotesCompanion(deletedAt: Value(deletedNote.deletedAt)));
+      if (updated != 1) {
+        throw StateError('Field note does not belong to the active account.');
+      }
 
       final payload = jsonEncode({
         'id': note.id,
@@ -194,8 +233,10 @@ class FieldNotesDao extends DatabaseAccessor<AppDatabase>
     await into(fieldNotes).insertOnConflictUpdate(note);
   }
 
-  Future<void> deleteFromServer(String noteId) async {
-    await (update(fieldNotes)..where((t) => t.id.equals(noteId))).write(
+  Future<void> deleteFromServer(String noteId, String userId) async {
+    await (update(fieldNotes)
+          ..where((t) => t.id.equals(noteId) & t.userId.equals(userId)))
+        .write(
       FieldNotesCompanion(deletedAt: Value(DateTime.now())),
     );
   }
